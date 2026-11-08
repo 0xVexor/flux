@@ -17,7 +17,10 @@ import { completeBytes } from '../engine/segmentation/ranges';
 import {
   categoryFolderName,
   categoryOf,
-  downloadsRelativePath,
+  clampFilename,
+  folderLabel,
+  folderSegments,
+  numberedFilename,
   sanitizeFilename,
 } from '../shared/files';
 import { originPattern, safeError, trustedSender, validateUrl } from '../shared/security';
@@ -39,6 +42,7 @@ import {
 } from './page-transfer';
 import { updateBrowserJob, browserNeedsReview } from '../domain/browser-download';
 import { nextRetryAt, retryDue, hasPendingTransfer } from '../domain/retry';
+import type { DownloadNotice } from '../shared/notices';
 import type { HlsReview, MediaReview } from '../engine/media/types';
 import type { DashReview, DashSelection } from '../engine/media/dash';
 import {
@@ -50,6 +54,19 @@ import {
 import { HostPermissionError } from '../engine/network/policy';
 
 const isExtension = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+/** The hidden page that runs the engine while no manager tab is open. */
+const isOffscreen =
+  typeof location !== 'undefined' && location.pathname.endsWith('/offscreen.html');
+/** Offscreen pages only have chrome.runtime, so these two go through the background there. */
+async function hasOrigins(origins: string[]) {
+  if (chrome.permissions?.contains) return chrome.permissions.contains({ origins });
+  const reply = await chrome.runtime.sendMessage({ type: 'has-origins', origins });
+  return reply?.ok === true;
+}
+async function setQueueAlarm(when: number) {
+  if (chrome.alarms?.create) await chrome.alarms.create('flux-queue', { when });
+  else await chrome.runtime.sendMessage({ type: 'set-queue-alarm', when }).catch(() => undefined);
+}
 class Manager implements ManagerAPI {
   private snapshot: Snapshot = { jobs: [], settings: defaultSettings, ready: false, error: null };
   private listeners = new Set<() => void>();
@@ -101,156 +118,187 @@ class Manager implements ManagerAPI {
     this.snapshot = { ...this.snapshot, ...patch, jobs: [...(patch.jobs ?? this.snapshot.jobs)] };
     this.listeners.forEach((fn) => fn());
   }
+  /** A manager tab replaces the hidden engine page: ask it to close, then wait for the lock. */
+  private async releaseOffscreenEngine() {
+    const query = navigator.locks.query?.bind(navigator.locks);
+    if (!query) return false;
+    const held = async () =>
+      ((await query()).held ?? []).some((lock) => lock.name === 'flux-manager-engine');
+    if (!(await held())) return false;
+    await chrome.runtime.sendMessage({ type: 'release-engine' }).catch(() => undefined);
+    for (let attempt = 0; attempt < 50; attempt++) {
+      if (!(await held())) return true;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return false;
+  }
   private async initialize() {
-    await navigator.locks.request('flux-manager-engine', { ifAvailable: true }, async (lock) => {
-      if (!lock) {
-        this.publish({
-          ready: true,
-          error:
-            'Another manager tab owns the engine. Close this tab and use the existing manager.',
+    // Downloads that were running when the engine changed hands continue on their own.
+    const handedOver = isOffscreen
+      ? new URLSearchParams(location.search).has('handoff')
+      : isExtension && (await this.releaseOffscreenEngine());
+    // The hidden page waits for a closing tab to let go of the engine; a tab never queues behind one.
+    await navigator.locks.request(
+      'flux-manager-engine',
+      { ifAvailable: !isOffscreen },
+      async (lock) => {
+        if (!lock) {
+          this.publish({
+            ready: true,
+            error:
+              'Another manager tab owns the engine. Close this tab and use the existing manager.',
+          });
+          return;
+        }
+        this.owned = true;
+        const settings = await this.repository.getSettings();
+        const traffic = await this.repository.getTraffic();
+        const jobs = await this.repository.getJobs();
+        for (const job of jobs) {
+          if (
+            !job.pageFile &&
+            job.note ===
+              'Created by the page in your browser; it has no web address to download again.'
+          ) {
+            job.pageFile = true;
+            await this.repository.putJob(job);
+          }
+          job.speed = 0;
+          job.connections = 0;
+          job.connectionSpeeds = [];
+          if (job.engine === 'browser') continue;
+          // Only a transfer that was actually running when the engine stopped may continue by itself.
+          const interrupted = runningStates.has(job.state) && job.state !== 'ASSEMBLING';
+          if (interrupted) {
+            job.state = job.state === 'EXPORTING' && job.sha256 ? 'ASSEMBLING' : 'PAUSED';
+            job.downloaded = completeBytes(job.segments);
+            job.note =
+              'Recovered after the manager closed. Resume to verify stored data and reconnect.';
+            job.timeline = [
+              ...job.timeline.slice(-99),
+              { at: Date.now(), event: 'Recovered interrupted job' },
+            ];
+            await this.repository.putJob(job);
+          }
+          if (
+            (settings.recovery === 'auto' || handedOver) &&
+            !job.capturePending &&
+            !job.budgetResumeAt &&
+            ((interrupted && job.state === 'PAUSED') || job.state === 'WAITING_FOR_NETWORK')
+          ) {
+            job.state = 'QUEUED';
+            await this.repository.putJob(job);
+          }
+        }
+        this.worker = new Worker(new URL('../engine/worker.ts', import.meta.url), {
+          type: 'module',
         });
-        return;
-      }
-      this.owned = true;
-      const settings = await this.repository.getSettings();
-      const traffic = await this.repository.getTraffic();
-      const jobs = await this.repository.getJobs();
-      for (const job of jobs) {
-        if (
-          !job.pageFile &&
-          job.note ===
-            'Created by the page in your browser; it has no web address to download again.'
-        ) {
-          job.pageFile = true;
-          await this.repository.putJob(job);
-        }
-        job.speed = 0;
-        job.connections = 0;
-        job.connectionSpeeds = [];
-        if (job.engine === 'browser') continue;
-        if (runningStates.has(job.state) && job.state !== 'ASSEMBLING') {
-          job.state = job.state === 'EXPORTING' && job.sha256 ? 'ASSEMBLING' : 'PAUSED';
-          job.downloaded = completeBytes(job.segments);
-          job.note =
-            'Recovered after the manager closed. Resume to verify stored data and reconnect.';
-          job.timeline = [
-            ...job.timeline.slice(-99),
-            { at: Date.now(), event: 'Recovered interrupted job' },
-          ];
-          await this.repository.putJob(job);
-        }
-        if (
-          settings.recovery === 'auto' &&
-          !job.capturePending &&
-          !job.budgetResumeAt &&
-          (job.state === 'PAUSED' || job.state === 'WAITING_FOR_NETWORK')
-        ) {
-          job.state = 'QUEUED';
-          await this.repository.putJob(job);
-        }
-      }
-      this.worker = new Worker(new URL('../engine/worker.ts', import.meta.url), { type: 'module' });
-      this.worker.onmessage = (event: MessageEvent<WorkerEvent>) => {
-        void this.onWorker(event.data).catch((e) => this.publish({ error: safeError(e) }));
-      };
-      this.worker.onerror = () => {
-        void this.workerCrashed();
-      };
-      const periodMs = settings.trafficPeriodHours * 3600000;
-      const periodStart = Math.floor(Date.now() / periodMs) * periodMs;
-      this.publish({
-        jobs,
-        settings,
-        ready: true,
-        traffic: {
-          used:
-            traffic?.periodMs === periodMs && traffic.periodStart === periodStart
-              ? traffic.used
-              : 0,
-          limit: settings.trafficLimit,
-          resetsAt: periodStart + periodMs,
-        },
-      });
-      this.directory = (await this.repository.getDestination()) ?? null;
-      await this.refreshDestination();
-      for (const job of jobs) if (job.state === 'ASSEMBLING') this.scheduleAutoSave(job.id);
-      await this.refreshStorage();
-      window.addEventListener('online', () => {
-        for (const job of this.snapshot.jobs)
-          if (job.state === 'WAITING_FOR_NETWORK')
-            void this.action(job.id, 'resume').catch((e) => this.publish({ error: safeError(e) }));
-      });
-      window.addEventListener('beforeunload', (event) => {
-        if (this.active.size || this.pageTransfers.receiving) {
-          event.preventDefault();
-        }
-      });
-      if (isExtension)
-        chrome.runtime.onMessage.addListener((message, sender, respond) => {
-          if (typeof message?.type === 'string' && message.type.startsWith('blob-')) {
-            if (message.type === 'blob-ready') {
-              if (sender.id === chrome.runtime.id && !sender.tab) respond({ ok: true });
+        this.worker.onmessage = (event: MessageEvent<WorkerEvent>) => {
+          void this.onWorker(event.data).catch((e) => this.publish({ error: safeError(e) }));
+        };
+        this.worker.onerror = () => {
+          void this.workerCrashed();
+        };
+        const periodMs = settings.trafficPeriodHours * 3600000;
+        const periodStart = Math.floor(Date.now() / periodMs) * periodMs;
+        this.publish({
+          jobs,
+          settings,
+          ready: true,
+          traffic: {
+            used:
+              traffic?.periodMs === periodMs && traffic.periodStart === periodStart
+                ? traffic.used
+                : 0,
+            limit: settings.trafficLimit,
+            resetsAt: periodStart + periodMs,
+          },
+        });
+        this.directory = (await this.repository.getDestination()) ?? null;
+        await this.refreshDestination();
+        for (const job of jobs) if (job.state === 'ASSEMBLING') this.scheduleAutoSave(job.id);
+        await this.refreshStorage();
+        window.addEventListener('online', () => {
+          for (const job of this.snapshot.jobs)
+            if (job.state === 'WAITING_FOR_NETWORK')
+              void this.action(job.id, 'resume').catch((e) =>
+                this.publish({ error: safeError(e) }),
+              );
+        });
+        window.addEventListener('beforeunload', (event) => {
+          // In the extension, closing the tab hands running downloads to the hidden engine, which
+          // continues them. Only bytes arriving from a web page cannot be handed over.
+          if (this.pageTransfers.receiving || (!isExtension && this.active.size)) {
+            event.preventDefault();
+          }
+        });
+        if (isExtension)
+          chrome.runtime.onMessage.addListener((message, sender, respond) => {
+            if (typeof message?.type === 'string' && message.type.startsWith('blob-')) {
+              if (message.type === 'blob-ready') {
+                if (sender.id === chrome.runtime.id && !sender.tab) respond({ ok: true });
+                return;
+              }
+              if (sender.id !== chrome.runtime.id || !sender.tab) return;
+              void this.pageTransfers.receive(message, sender).then(respond, (error) => {
+                respond({ ok: false, error: safeError(error) });
+              });
+              return true;
+            }
+            if (
+              !trustedSender(sender) &&
+              !(
+                sender.id === chrome.runtime.id &&
+                !sender.tab &&
+                sender.url === chrome.runtime.getURL('background.js')
+              )
+            )
+              return;
+            if (message?.type === 'manager-snapshot') {
+              respond(this.snapshot);
               return;
             }
-            if (sender.id !== chrome.runtime.id || !sender.tab) return;
-            void this.pageTransfers.receive(message, sender).then(respond, (error) => {
-              respond({ ok: false, error: safeError(error) });
-            });
-            return true;
-          }
-          if (
-            !trustedSender(sender) &&
-            !(
-              sender.id === chrome.runtime.id &&
-              !sender.tab &&
-              sender.url === chrome.runtime.getURL('background.js')
-            )
-          )
-            return;
-          if (message?.type === 'manager-snapshot') {
-            respond(this.snapshot);
-            return;
-          }
-          if (message?.type === 'native-update') {
-            this.applyBrowserUpdate(message.job, message.removed);
-            respond({ ok: true });
-            return;
-          }
-          if (
-            message?.type === 'manager-command' &&
-            typeof message.id === 'string' &&
-            ['pause', 'resume', 'retry'].includes(message.action)
-          ) {
-            void this.action(message.id, message.action).then(
-              () => respond({ ok: true }),
-              (e) => respond({ ok: false, error: safeError(e) }),
-            );
-            return true;
-          }
-          if (message?.type === 'queue-wake') {
-            void this.refreshQueue().then(
-              () => respond({ ok: true }),
-              (error) => respond({ ok: false, error: safeError(error) }),
-            );
-            return true;
-          }
-          if (message?.type === 'integration-settings') {
-            void this.repository.getSettings().then(
-              (settings) => {
-                this.publish({ settings });
-                respond({ ok: true });
-              },
-              (error) => respond({ error: safeError(error) }),
-            );
-            return true;
-          }
+            if (message?.type === 'native-update') {
+              this.applyBrowserUpdate(message.job, message.removed);
+              respond({ ok: true });
+              return;
+            }
+            if (
+              message?.type === 'manager-command' &&
+              typeof message.id === 'string' &&
+              ['pause', 'resume', 'retry'].includes(message.action)
+            ) {
+              void this.action(message.id, message.action).then(
+                () => respond({ ok: true }),
+                (e) => respond({ ok: false, error: safeError(e) }),
+              );
+              return true;
+            }
+            if (message?.type === 'queue-wake') {
+              void this.refreshQueue().then(
+                () => respond({ ok: true }),
+                (error) => respond({ ok: false, error: safeError(error) }),
+              );
+              return true;
+            }
+            if (message?.type === 'integration-settings') {
+              void this.repository.getSettings().then(
+                (settings) => {
+                  this.publish({ settings });
+                  respond({ ok: true });
+                },
+                (error) => respond({ error: safeError(error) }),
+              );
+              return true;
+            }
+          });
+        await this.refreshQueue();
+        await this.syncBrowserRows(true);
+        await new Promise<void>((resolve) => {
+          this.releaseLock = resolve;
         });
-      await this.refreshQueue();
-      await this.syncBrowserRows(true);
-      await new Promise<void>((resolve) => {
-        this.releaseLock = resolve;
-      });
-    });
+      },
+    );
   }
   private pageTransfers = new PageTransfers({
     authorize: async (token, sender) => {
@@ -267,7 +315,7 @@ class Manager implements ManagerAPI {
         !tab?.url ||
         excludedHost(new URL(grant.source).hostname, settings.excludedHosts) ||
         excludedHost(new URL(tab.url).hostname, settings.excludedHosts) ||
-        !(await chrome.permissions.contains({ origins: [origin + '/*'] }))
+        !(await hasOrigins([origin + '/*']))
       )
         throw new Error('Page file access is no longer allowed.');
       return grant;
@@ -347,6 +395,7 @@ class Manager implements ManagerAPI {
     if (
       !this.owned ||
       !isExtension ||
+      !chrome.downloads ||
       !this.snapshot.jobs.some((job) => job.engine === 'browser' && job.state === 'DOWNLOADING')
     )
       return;
@@ -356,7 +405,7 @@ class Manager implements ManagerAPI {
     }, 1000);
   }
   private async syncBrowserRows(all = false) {
-    if (!isExtension || this.browserReading) return;
+    if (!isExtension || !chrome.downloads || this.browserReading) return;
     this.browserReading = true;
     try {
       const known = this.snapshot.jobs.filter(
@@ -457,6 +506,17 @@ class Manager implements ManagerAPI {
     for (const resolve of this.waiters.values()) resolve();
     this.waiters.clear();
   }
+  /**
+   * Tells the background about a finished, ready or failed download. The background shows the
+   * popup and, if the user turned them on, the system notification, so the hidden engine page
+   * (which has no notification API of its own) announces things the same way a tab does.
+   */
+  private announce(notice: Omit<DownloadNotice, 'at'>) {
+    if (!isExtension) return;
+    void chrome.runtime
+      .sendMessage({ type: 'download-notice', ...notice, at: Date.now() })
+      .catch(() => undefined);
+  }
   private async onWorker(event: WorkerEvent) {
     if (event.type === 'crawl-progress') {
       this.crawls.get(event.requestId)?.progress?.(event.progress);
@@ -476,11 +536,18 @@ class Manager implements ManagerAPI {
     }
     if (event.type === 'redirect' || event.type === 'prepare-request') {
       try {
-        const reply = await chrome.runtime.sendMessage({
-          type: event.type === 'redirect' ? 'resolve-redirect' : 'prepare-request',
-          url: event.from,
-          location: event.location,
-        });
+        const ask = () =>
+          chrome.runtime.sendMessage({
+            type: event.type === 'redirect' ? 'resolve-redirect' : 'prepare-request',
+            url: event.from,
+            location: event.location,
+          });
+        // A service worker that is still starting can drop the first message; ask once more.
+        const reply = (await ask()) ?? (await new Promise((r) => setTimeout(r, 300)).then(ask));
+        if (!reply)
+          throw new Error(
+            `Flux’s background service did not answer the ${event.type} lookup. Reload the extension and retry.`,
+          );
         this.worker?.postMessage({ type: 'redirect-result', requestId: event.requestId, ...reply });
       } catch (error) {
         this.worker?.postMessage({
@@ -498,19 +565,24 @@ class Manager implements ManagerAPI {
       this.active.delete(event.job.id);
       this.waiters.get(event.job.id)?.();
       this.waiters.delete(event.job.id);
-      if (event.type === 'done' && this.snapshot.settings.notifications && isExtension)
+      const settings = this.snapshot.settings;
+      if (event.type === 'done') {
+        // With automatic saving on, the file announces itself once it is saved instead.
+        const queue = settings.queues.find((item) => item.id === event.job.queueId);
+        if (!queue?.notifyOnComplete && (!settings.autoSave || !this.directory))
+          this.announce({ kind: 'ready', filename: event.job.filename });
+      }
+      if (event.type === 'failed') {
+        // A failure that will be retried, or that needs website access, is not final news.
+        const job = event.job;
         if (
-          !this.snapshot.settings.queues.find((queue) => queue.id === event.job.queueId)
-            ?.notifyOnComplete
+          job.error &&
+          !job.permissionOrigin &&
+          job.queueRetryAt == null &&
+          !nextRetryAt(job, settings)
         )
-          void chrome.notifications
-            .create({
-              type: 'basic',
-              iconUrl: 'icon128.png',
-              title: 'Flux · ready to save',
-              message: event.job.filename,
-            })
-            .catch((e) => this.publish({ error: safeError(e) }));
+          this.announce({ kind: 'failed', id: job.id, filename: job.filename, error: job.error });
+      }
       if (event.type === 'done' && this.snapshot.settings.completionSound) playCompletionSound();
       if (Date.now() - this.storageAt > 10000) await this.refreshStorage();
     }
@@ -1209,11 +1281,15 @@ class Manager implements ManagerAPI {
       throw new Error(
         'Chrome saves this original transfer directly. Use Show in folder after it finishes.',
       );
+    if (job.stagedRemoved)
+      throw new Error(
+        'The temporary copy was deleted after saving. Download the file again to save another copy.',
+      );
     if (!job.sha256 || !['ASSEMBLING', 'COMPLETED', 'FAILED'].includes(job.state))
       throw new Error('The file must finish verification before saving.');
     if (!saveAs) {
       // Save straight into the configured location (category folder), without a dialog.
-      if (this.snapshot.settings.saveLocation === 'folder' && this.directory) {
+      if (this.directory) {
         // Called before any other await so the click still counts as user activation.
         const granted = await (
           this.directory as FileSystemDirectoryHandle & {
@@ -1247,7 +1323,12 @@ class Manager implements ManagerAPI {
     const handle = await picker({ suggestedName: job.filename });
     await this.writeExport(id, handle, job);
   }
-  private async writeExport(id: string, handle: FileSystemFileHandle, job: DownloadJob) {
+  private async writeExport(
+    id: string,
+    handle: FileSystemFileHandle,
+    job: DownloadJob,
+    location = '',
+  ) {
     if (
       this.job(id) !== job ||
       !job.sha256 ||
@@ -1285,7 +1366,17 @@ class Manager implements ManagerAPI {
       job.exported = true;
       job.exportedAt = Date.now();
       job.error = null;
+      // The saved file is the copy that matters; free the temporary one unless asked to keep it.
+      if (!this.snapshot.settings.keepStagedCopy) {
+        await removePartial(id).then(
+          () => {
+            job.stagedRemoved = true;
+          },
+          () => undefined,
+        );
+      }
       await this.persist(job);
+      this.announce({ kind: 'saved', filename: job.filename, folder: location });
     } catch (error) {
       const unfinished = writable as FileSystemWritableFileStream | null;
       if (unfinished) await unfinished.abort().catch(() => undefined);
@@ -1313,9 +1404,25 @@ class Manager implements ManagerAPI {
           .catch(() => false)
       : false;
     this.publish({
-      destination: this.directory ? { name: this.directory.name, authorized } : undefined,
+      destination: this.directory
+        ? { name: folderLabel(this.directory.name), authorized }
+        : undefined,
     });
     return authorized;
+  }
+  async restoreFolderAccess() {
+    this.ensureOwner();
+    if (!this.directory) throw new Error('Choose a download folder first.');
+    // Must run before any other await so the click still counts as user activation.
+    const granted = await (
+      this.directory as FileSystemDirectoryHandle & {
+        requestPermission(options: { mode: 'readwrite' }): Promise<PermissionState>;
+      }
+    ).requestPermission({ mode: 'readwrite' });
+    if (granted !== 'granted') throw new Error('Folder access was declined.');
+    await this.refreshDestination();
+    for (const job of this.snapshot.jobs)
+      if (job.state === 'ASSEMBLING') this.scheduleAutoSave(job.id);
   }
   async chooseDownloadFolder() {
     this.ensureOwner();
@@ -1332,7 +1439,34 @@ class Manager implements ManagerAPI {
       throw new Error(
         'This browser has no folder picker. In Brave, open brave://flags/#file-system-access-api, set it to Enabled, restart, and try again.',
       );
-    const handle = await picker({ mode: 'readwrite', id: 'flux-downloads', startIn: 'downloads' });
+    let handle: FileSystemDirectoryHandle;
+    try {
+      handle = await picker({ mode: 'readwrite', id: 'flux-downloads', startIn: 'downloads' });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      if (
+        error instanceof DOMException &&
+        ['SecurityError', 'NotAllowedError'].includes(error.name)
+      )
+        throw new Error(
+          'Chrome does not allow this folder. Pick or create a subfolder, for example Downloads/Flux.',
+        );
+      throw error;
+    }
+    // Prove Flux can really write here before remembering the folder. Chrome may grant the
+    // folder while the operating system (for example macOS privacy settings) still refuses writes.
+    try {
+      const probe = await handle.getFileHandle('.flux-write-test', { create: true });
+      const writable = await probe.createWritable();
+      await writable.write(new Uint8Array([0]));
+      await writable.close();
+      await handle.removeEntry('.flux-write-test');
+    } catch (error) {
+      const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      throw new Error(
+        `Flux could not write to “${folderLabel(handle.name)}” (${reason}). On macOS, open System Settings › Privacy & Security › Files and Folders (or Full Disk Access) and allow your browser, then choose the folder again.`,
+      );
+    }
     await this.repository.putDestination(handle);
     this.directory = handle;
     await this.refreshDestination();
@@ -1351,16 +1485,19 @@ class Manager implements ManagerAPI {
         const job = this.snapshot.jobs.find((item) => item.id === id);
         const settings = this.snapshot.settings;
         if (!job || job.state !== 'ASSEMBLING' || !settings.autoSave) return;
-        if (settings.saveLocation === 'folder') {
-          if (!this.directory) return;
-          if (!(await this.refreshDestination())) {
-            if (!this.snapshot.jobs.includes(job)) return;
-            job.note =
-              'Choose the download folder again to restore saving permission. Verified data is retained.';
-            await this.persist(job);
-            return;
-          }
-        } else if (!isExtension) return;
+        if (!this.directory) {
+          job.note =
+            'Choose a download folder so Flux can save this file. Verified data is retained.';
+          await this.persist(job);
+          return;
+        }
+        if (!(await this.refreshDestination())) {
+          if (!this.snapshot.jobs.includes(job)) return;
+          job.note =
+            'Choose the download folder again to restore saving permission. Verified data is retained.';
+          await this.persist(job);
+          return;
+        }
         try {
           await this.saveToDestination(id, job);
         } catch (error) {
@@ -1378,23 +1515,26 @@ class Manager implements ManagerAPI {
   /** Saves a verified file to the configured location (Downloads or chosen folder), no dialog. */
   private async saveToDestination(id: string, job: DownloadJob) {
     const settings = this.snapshot.settings;
-    if (settings.saveLocation !== 'folder') {
-      await this.saveToDownloads(id, job, downloadsRelativePath(job.filename, settings));
-      return;
-    }
     if (!this.directory) throw new Error('Choose a download folder in Settings first.');
     let directory = this.directory;
-    if (settings.saveByCategory)
-      for (const part of categoryFolderName(job.category, settings).split('/'))
-        directory = await directory.getDirectoryHandle(part, { create: true });
-    const dot = job.filename.lastIndexOf('.');
-    const stem = dot > 0 ? job.filename.slice(0, dot) : job.filename;
-    const extension = dot > 0 ? job.filename.slice(dot) : '';
-    let filename = job.filename;
+    // A drive root has no usable name, so it is left out of the shown location.
+    const shown = [this.directory.name];
+    // A folder chosen for this one download replaces the category folder.
+    const parts = job.saveSubfolder
+      ? folderSegments(job.saveSubfolder)
+      : settings.saveByCategory
+        ? categoryFolderName(job.category, settings).split('/')
+        : [];
+    for (const part of parts) {
+      directory = await directory.getDirectoryHandle(part, { create: true });
+      shown.push(part);
+    }
+    // Older jobs may hold a name that is short in characters but too long in bytes.
+    let filename = clampFilename(job.filename, 200);
     for (let collision = 0; collision < 10000; collision++) {
       try {
         await directory.getFileHandle(filename);
-        filename = `${stem.slice(0, 150)} (${collision + 1})${extension}`;
+        filename = numberedFilename(job.filename, collision + 1);
       } catch (error) {
         if (error instanceof DOMException && error.name === 'NotFoundError') break;
         throw error;
@@ -1403,13 +1543,12 @@ class Manager implements ManagerAPI {
     }
     if (!this.snapshot.jobs.includes(job) || job.state !== 'ASSEMBLING') return;
     const handle = await directory.getFileHandle(filename, { create: true });
-    await this.writeExport(id, handle, job);
-  }
-  private async setSaveDialogDetected(value: boolean) {
-    if (!!this.snapshot.settings.saveDialogDetected === value) return;
-    const settings = { ...(await this.repository.getSettings()), saveDialogDetected: value };
-    await this.repository.putSettings(settings);
-    this.publish({ settings });
+    await this.writeExport(
+      id,
+      handle,
+      job,
+      shown.filter((part) => part && part !== '/' && part !== '\\').join('/'),
+    );
   }
   /** Turns automatic saving on or off from the main page. */
   async setAutoSave(enabled: boolean) {
@@ -1418,107 +1557,6 @@ class Manager implements ManagerAPI {
     if (enabled)
       for (const job of this.snapshot.jobs)
         if (job.state === 'ASSEMBLING') this.scheduleAutoSave(job.id);
-  }
-  /** Hands the verified staged file to Chrome, which writes it under its Downloads folder. */
-  private async saveToDownloads(id: string, job: DownloadJob, relativePath: string) {
-    if (!job.sha256 || job.state !== 'ASSEMBLING') return;
-    const file = await partialFile(id);
-    if (file.size !== job.total) throw new Error('Stored file size changed. Save stopped.');
-    if (this.job(id) !== job || job.state !== 'ASSEMBLING') return;
-    transition(job, 'EXPORTING');
-    let url: string | null = null;
-    let destinationCommitted = false;
-    try {
-      await this.persist(job);
-      // This path gives Chrome a file-backed Blob instead of a writable stream.
-      // Recheck that exact immutable File snapshot before Chrome can commit it.
-      await withSHA256(async (hasher) => {
-        const reader = file.stream().getReader();
-        try {
-          while (true) {
-            const part = await reader.read();
-            if (part.done) break;
-            hasher.update(part.value);
-          }
-        } finally {
-          await reader.cancel().catch(() => undefined);
-          reader.releaseLock();
-        }
-        if (hasher.digest('hex') !== job.sha256)
-          throw new Error(
-            'Stored content failed SHA-256 verification. No browser save was started.',
-          );
-      });
-      // An untyped blob lets Chrome swap the extension (e.g. .bin -> .txt); octet-stream keeps it.
-      url = URL.createObjectURL(new Blob([file], { type: 'application/octet-stream' }));
-      // Read by the background onDeterminingFilename listener, which otherwise renames the file.
-      await chrome.storage.session.set({ [`save:${url}`]: relativePath });
-      const downloadId = await chrome.downloads.download({
-        url,
-        filename: relativePath,
-        conflictAction: 'uniquify',
-        saveAs: false,
-      });
-      // Browsers set to "ask where to save" hold the save in a dialog with no target filename.
-      let dialogSeen = false;
-      const dialogProbe = setTimeout(() => {
-        void chrome.downloads.search({ id: downloadId }).then(([current]) => {
-          if (current?.state === 'in_progress' && !current.filename) {
-            dialogSeen = true;
-            void this.setSaveDialogDetected(true);
-          }
-        });
-      }, 1500);
-      const item = await new Promise<chrome.downloads.DownloadItem>((resolve, reject) => {
-        const check = async () => {
-          const current = (await chrome.downloads.search({ id: downloadId }))[0];
-          if (!current) return finish(new Error('Chrome removed the save before it finished.'));
-          if (current.state === 'complete') finish(undefined, current);
-          else if (current.state === 'interrupted') {
-            if (current.error === 'USER_CANCELED') void this.setSaveDialogDetected(true);
-            finish(
-              new Error(`Chrome could not write the file (${current.error ?? 'interrupted'}).`),
-            );
-          }
-        };
-        const listener = (change: chrome.downloads.DownloadDelta) => {
-          if (change.id === downloadId && change.state) void check().catch(finish);
-        };
-        const finish = (error?: unknown, value?: chrome.downloads.DownloadItem) => {
-          clearTimeout(dialogProbe);
-          chrome.downloads.onChanged.removeListener(listener);
-          if (value) resolve(value);
-          else reject(error);
-        };
-        chrome.downloads.onChanged.addListener(listener);
-        void check().catch(finish);
-      });
-      destinationCommitted = true;
-      if (!dialogSeen && this.snapshot.settings.saveDialogDetected)
-        await this.setSaveDialogDetected(false);
-      job.savedDownloadId = item.id;
-      transition(job, 'COMPLETED');
-      job.exported = true;
-      job.exportedAt = Date.now();
-      job.error = null;
-      const folder = relativePath.split('/').slice(0, -1).join('/');
-      job.note = folder ? `Saved to Downloads/${folder}` : 'Saved to your Downloads folder';
-      await this.persist(job);
-    } catch (error) {
-      if (destinationCommitted) {
-        job.error =
-          'File saved successfully, but history could not be updated. ' + safeError(error);
-        this.publish();
-        throw new Error(job.error);
-      }
-      transition(job, 'ASSEMBLING', 'Save interrupted; verified data retained');
-      throw error;
-    } finally {
-      if (url) {
-        URL.revokeObjectURL(url);
-        await chrome.storage.session.remove(`save:${url}`).catch(() => undefined);
-      }
-    }
   }
   async browserDownload(id: string) {
     const job = this.job(id);
@@ -1703,7 +1741,7 @@ class Manager implements ManagerAPI {
             ))
         ) {
           this.scheduled = setTimeout(() => void this.pump(), Math.max(0, next - Date.now()));
-          if (isExtension) await chrome.alarms.create('flux-queue', { when: next });
+          if (isExtension) await setQueueAlarm(next);
         }
         if (!this.forced.size) return;
         if (this.scheduled) clearTimeout(this.scheduled);
@@ -1757,7 +1795,7 @@ class Manager implements ManagerAPI {
             job.media.recording.snapshot &&
             job.segments.length > (job.media.transport === 'mpegts' ? 0 : 1)
           ) &&
-          !(await chrome.permissions.contains({ origins: [originPattern(job.url)] }))
+          !(await hasOrigins([originPattern(job.url)]))
         ) {
           if (job.state !== 'FAILED')
             transition(job, 'PAUSED', 'Website access was revoked. Restore access in Chrome.');
@@ -1861,7 +1899,7 @@ class Manager implements ManagerAPI {
           () => void this.pump(),
           Math.min(2147483647, Math.max(0, when - Date.now())),
         );
-        if (isExtension) await chrome.alarms.create('flux-queue', { when });
+        if (isExtension) await setQueueAlarm(when);
       }
     } catch (error) {
       this.publish({ error: safeError(error) });
@@ -1919,15 +1957,12 @@ class Manager implements ManagerAPI {
         await this.repository.putSettings(settings);
         this.publish({ settings });
       }
-      if (notify && queue.notifyOnComplete && this.snapshot.settings.notifications && isExtension)
-        await chrome.notifications
-          .create({
-            type: 'basic',
-            iconUrl: 'icon128.png',
-            title: 'Flux — queue verified',
-            message: `${queue.name}: all files verified. ${jobs.filter((job) => job.state === 'ASSEMBLING').length} waiting to save.`,
-          })
-          .catch((error) => this.publish({ error: safeError(error) }));
+      if (notify && queue.notifyOnComplete)
+        this.announce({
+          kind: 'queue',
+          filename: queue.name,
+          waiting: jobs.filter((job) => job.state === 'ASSEMBLING').length,
+        });
       if (queue.stopOnComplete && !queue.paused) {
         const settings = {
           ...this.snapshot.settings,

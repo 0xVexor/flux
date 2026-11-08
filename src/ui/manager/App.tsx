@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { DisplayOptions, useDisplayOptions } from './DisplayOptions';
 import {
+  CircleCheck,
   ArrowDown,
   ArrowDownToLine,
   Archive,
@@ -369,6 +370,23 @@ function JobCard({
 }
 export function App() {
   const snapshot = useSyncExternalStore(manager.subscribe, manager.getSnapshot);
+  const [savedToast, setSavedToast] = useState('');
+  const toastSince = useRef(Date.now());
+  const toastSeen = useRef(new Set<string>());
+  useEffect(() => {
+    for (const job of snapshot.jobs) {
+      const key = `${job.id}:${job.exportedAt}`;
+      if (!job.exported || !job.exportedAt || job.exportedAt < toastSince.current) continue;
+      if (toastSeen.current.has(key)) continue;
+      toastSeen.current.add(key);
+      setSavedToast(job.filename);
+    }
+  }, [snapshot.jobs]);
+  useEffect(() => {
+    if (!savedToast) return;
+    const timer = setTimeout(() => setSavedToast(''), 6000);
+    return () => clearTimeout(timer);
+  }, [savedToast]);
   const [view, setView] = useState('all');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('newest');
@@ -742,12 +760,28 @@ export function App() {
             <ChevronRight size={14} />
             <strong>{view === 'settings' ? 'Settings' : title}</strong>
           </nav>
-          {(error || snapshot.error) && (
-            <div className="global-error" role="alert">
-              <CircleAlert size={18} />
-              <span>{error || snapshot.error}</span>
+          {savedToast && (
+            <div className="ds-toast" role="status">
+              <CircleCheck size={16} aria-hidden="true" />
+              <div className="ds-toast-body">
+                <strong>Download complete</strong>
+                <span title={savedToast}>{savedToast}</span>
+              </div>
               <button
-                className="icon-button"
+                className="ds-icon-btn is-small"
+                aria-label="Dismiss"
+                onClick={() => setSavedToast('')}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
+          {(error || snapshot.error) && (
+            <div className="ds-notice is-error is-spaced" role="alert">
+              <CircleAlert size={16} aria-hidden="true" />
+              <span className="ds-notice-text">{error || snapshot.error}</span>
+              <button
+                className="ds-icon-btn is-small"
                 aria-label="Dismiss error"
                 onClick={() => setError('')}
               >
@@ -756,9 +790,9 @@ export function App() {
             </div>
           )}
           {!(bannerHidden && snapshot.settings.interception && captureAccess) && (
-            <section className="capture-setup" aria-label="Automatic download capture">
-              <ShieldCheck size={23} />
-              <div>
+            <section className="ds-alert is-spaced" aria-label="Automatic download capture">
+              <ShieldCheck size={16} aria-hidden="true" />
+              <div className="ds-alert-body">
                 <strong>
                   {snapshot.settings.interception && captureAccess
                     ? 'Automatic capture is on'
@@ -770,28 +804,25 @@ export function App() {
                     : 'Enable automatic capture and approve website access so clicking a file starts Flux instead of Chrome’s default downloader.'}
                 </p>
               </div>
-              {(!snapshot.settings.interception || !captureAccess) && (
-                <button
-                  className="button primary"
-                  onClick={() => run(() => manager.enableAutomaticCapture())}
-                >
-                  Enable automatic downloads
-                </button>
-              )}
-              {snapshot.settings.interception && captureAccess && (
-                <>
-                  <span className="banner-art browser-art" aria-hidden="true">
-                    <Zap size={20} fill="currentColor" />
-                  </span>
+              <div className="ds-alert-actions">
+                {(!snapshot.settings.interception || !captureAccess) && (
                   <button
-                    className="icon-button banner-close"
+                    className="ds-btn is-primary is-small"
+                    onClick={() => run(() => manager.enableAutomaticCapture())}
+                  >
+                    Enable automatic downloads
+                  </button>
+                )}
+                {snapshot.settings.interception && captureAccess && (
+                  <button
+                    className="ds-icon-btn is-small"
                     aria-label="Dismiss banner"
                     onClick={() => setBannerHidden(true)}
                   >
-                    <X size={18} />
+                    <X size={16} />
                   </button>
-                </>
-              )}
+                )}
+              </div>
             </section>
           )}
           <SaveSetup
@@ -807,18 +838,18 @@ export function App() {
               aria-live="polite"
             >
               {offers.map((offer) => (
-                <article className="native-offer" key={offer.id}>
-                  <ArrowDownToLine size={20} aria-hidden="true" />
-                  <div className="native-offer-copy">
-                    <h3 title={offer.filename}>{offer.filename}</h3>
+                <article className="ds-alert is-spaced" key={offer.id}>
+                  <ArrowDownToLine size={16} aria-hidden="true" />
+                  <div className="ds-alert-body">
+                    <strong title={offer.filename}>{offer.filename}</strong>
                     <p>
                       Chrome is already downloading this file. Reviewing in Flux starts a separate
                       transfer; cancel the browser download manually before switching.
                     </p>
                   </div>
-                  <div className="native-offer-actions">
+                  <div className="ds-alert-actions">
                     <button
-                      className="button secondary"
+                      className="ds-btn is-outline is-small"
                       onClick={() => {
                         setInitialUrl(offer.url);
                         setAdd(true);
@@ -827,7 +858,7 @@ export function App() {
                       Review link
                     </button>
                     <button
-                      className="icon-button"
+                      className="ds-icon-btn is-small"
                       aria-label={`Dismiss offer for ${offer.filename}`}
                       onClick={() => run(() => dismissOffer(offer.id))}
                     >
@@ -839,7 +870,7 @@ export function App() {
             </section>
           )}
           {!!snapshot.settings.trafficLimit && (
-            <div className="notice" role="status">
+            <div className="ds-notice is-spaced" role="status">
               Download allowance: {bytes(snapshot.traffic?.used ?? 0)} /{' '}
               {bytes(snapshot.settings.trafficLimit)}
               {snapshot.traffic?.resetsAt

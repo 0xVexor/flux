@@ -13,7 +13,8 @@
     "alarms",
     "activeTab",
     "scripting",
-    "webRequest"
+    "webRequest",
+    "offscreen"
   ],
   "optional_permissions": ["notifications"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],

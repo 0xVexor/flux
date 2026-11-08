@@ -72,6 +72,7 @@ export async function verifyStoredFile(store: ByteStore, segments: Segment[], si
 export async function runDownload(options: EngineOptions) {
   const { job, settings, store, signal, checkpoint, progress } = options;
   job.sha256 = null;
+  job.stagedRemoved = false;
   const fetcher = options.fetcher ?? fetch;
   await store.open(job.id);
   const started = performance.now();

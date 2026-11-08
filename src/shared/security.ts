@@ -64,7 +64,7 @@ export function trustedSender(sender: chrome.runtime.MessageSender) {
     return (
       parsed.protocol === 'chrome-extension:' &&
       parsed.host === chrome.runtime.id &&
-      ['/manager.html', '/popup.html'].includes(parsed.pathname)
+      ['/manager.html', '/popup.html', '/offscreen.html'].includes(parsed.pathname)
     );
   } catch {
     return false;

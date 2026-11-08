@@ -2,45 +2,33 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowDown,
-  Archive,
-  AudioLines,
-  ChevronRight,
-  File as FileIcon,
-  FileText,
-  Image as ImageIcon,
-  LayoutGrid,
   Settings,
-  Video,
+  Zap,
   ArrowUpRight,
-  ArrowDownToLine,
   CircleAlert,
   ExternalLink,
   LoaderCircle,
   Pause,
   Play,
   Plus,
-  ShieldCheck,
-  Zap,
 } from 'lucide-react';
 import type { Snapshot, DownloadJob } from '../../domain/model';
 import { bytes, eta, hostname, isActive, percent, stateLabel } from '../components/format';
 import { captureOrigins } from '../../shared/capture';
 import { browserNeedsReview } from '../../domain/browser-download';
 import { QueueChooser, type QueueChoice } from './QueueChooser';
+import { NoticeView } from './NoticeView';
+import { readNotice, type DownloadNotice } from '../../shared/notices';
 import { AddDownload } from '../manager/AddDownload';
 import type { ManagerAPI } from '../../application/contracts';
+import { categoryIcons } from '../components/category-icons';
 import '../theme.css';
-const categoryIcons = {
-  Documents: FileText,
-  Archives: Archive,
-  Videos: Video,
-  Audio: AudioLines,
-  Images: ImageIcon,
-  Software: LayoutGrid,
-  Other: FileIcon,
-};
+import '../ds.css';
+import './popup-minimal.css';
 const SPARK_POINTS = 24;
-/** Area chart of recent transfer speed; a gentle wave while idle. */
+/** How long the "download complete" popup stays before it closes itself. */
+const SAVED_POPUP_MS = 3000;
+/** Thin line of recent transfer speed; flat while idle. */
 function Spark({ samples }: { samples: number[] }) {
   const { line, area } = useMemo(() => {
     const max = Math.max(...samples, 1);
@@ -48,31 +36,39 @@ function Spark({ samples }: { samples: number[] }) {
     const path = samples
       .map((value, index) => {
         const x = (index / (SPARK_POINTS - 1)) * 200;
-        const y = flat ? 48 - Math.sin(index / 3) * 6 : 56 - (value / max) * 46;
+        const y = flat ? 52 : 56 - (value / max) * 46;
         return `${index ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`;
       })
       .join(' ');
     return { line: path, area: `${path} L200 70 L0 70 Z` };
   }, [samples]);
   return (
-    <svg className="popup-spark" viewBox="0 0 200 70" preserveAspectRatio="none" aria-hidden="true">
+    <svg className="pm-spark" viewBox="0 0 200 70" preserveAspectRatio="none" aria-hidden="true">
       <defs>
-        <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="var(--accent)" stopOpacity="0.32" />
-          <stop offset="1" stopColor="var(--accent)" stopOpacity="0" />
+        <linearGradient id="pm-spark-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="currentColor" stopOpacity="0.28" />
+          <stop offset="1" stopColor="currentColor" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d={area} fill="url(#spark-fill)" />
+      <path d={area} fill="url(#pm-spark-fill)" />
       <path
         d={line}
         fill="none"
-        stroke="var(--accent)"
+        stroke="currentColor"
         strokeWidth="1.8"
         vectorEffect="non-scaling-stroke"
         strokeLinejoin="round"
+        strokeLinecap="round"
       />
     </svg>
   );
+}
+/** The dot in front of a row's details says what the download is doing at a glance. */
+function stateDot(job: DownloadJob) {
+  if (isActive(job)) return 'is-live';
+  if (job.state === 'FAILED') return 'is-bad';
+  if (job.state === 'PAUSED' || job.state === 'WAITING_FOR_NETWORK') return 'is-warn';
+  return '';
 }
 function Popup() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -82,7 +78,16 @@ function Popup() {
     try {
       if (!globalThis.chrome?.runtime?.id)
         throw new Error('Open Flux from its Chrome extension toolbar icon.');
-      const result = (await chrome.runtime.sendMessage({ type: 'snapshot' })) as Snapshot;
+      // Never sit on "Loading" for ever: if the background does not answer, say so.
+      const result = (await Promise.race([
+        chrome.runtime.sendMessage({ type: 'snapshot' }),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Flux did not answer. Reload the extension and try again.')),
+            6000,
+          ),
+        ),
+      ])) as Snapshot;
       if (!result || !Array.isArray(result.jobs))
         throw new Error('Open the manager to restore your downloads.');
       setSnapshot(result);
@@ -97,6 +102,26 @@ function Popup() {
     }
   }, []);
   const [notice, setNotice] = useState(0);
+  const [finished, setFinished] = useState<DownloadNotice | null>(null);
+  useEffect(() => {
+    if (!globalThis.chrome?.storage?.session) return;
+    // Set by the background when a download finished, is ready to save, or failed.
+    const show = (value: unknown) => {
+      const item = readNotice(value);
+      if (item && Date.now() - item.at < 15000) setFinished(item);
+    };
+    const changed = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
+      if (area === 'session' && changes.downloadNotice) show(changes.downloadNotice.newValue);
+    };
+    chrome.storage.onChanged.addListener(changed);
+    void chrome.storage.session.get('downloadNotice').then((stored) => show(stored.downloadNotice));
+    return () => chrome.storage.onChanged.removeListener(changed);
+  }, []);
+  useEffect(() => {
+    if (finished?.kind !== 'saved') return;
+    const timer = setTimeout(() => window.close(), SAVED_POPUP_MS);
+    return () => clearTimeout(timer);
+  }, [finished]);
   const [choice, setChoice] = useState<QueueChoice | null>(null);
   useEffect(() => {
     if (!globalThis.chrome?.storage?.session) return;
@@ -210,9 +235,11 @@ function Popup() {
         ['PAUSED', 'QUEUED', 'WAITING_FOR_NETWORK'].includes(job.state) ||
         (job.state === 'FAILED' && job.queueRetryAt != null),
     ) ?? [];
-  const jobs = pending.slice(0, 5);
+  const jobs = pending;
   const capture =
-    snapshot?.settings.confirmCapture && choice?.items.length === 1 && choice.items[0]?.url
+    choice?.items.length === 1 &&
+    choice.items[0]?.url &&
+    (snapshot?.settings.confirmCapture || choice.items[0].duplicateOf)
       ? choice.items[0]
       : null;
   const batch = !!snapshot && !capture && !!choice?.items.length;
@@ -255,11 +282,25 @@ function Popup() {
     history.current = [...history.current.slice(1), speed];
     setSamples(history.current);
   }, [snapshot]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (finished && !choice?.items.length)
+    return (
+      <NoticeView
+        key={finished.at}
+        notice={finished}
+        onClose={() => window.close()}
+        onOpenManager={() => void open()}
+        onRetry={() => {
+          void chrome.runtime
+            .sendMessage({ type: 'command', id: finished.id, action: 'retry' })
+            .finally(() => window.close());
+        }}
+      />
+    );
   if (snapshot && batch && choice)
     return (
       <QueueChooser
         choice={choice}
-        queues={snapshot.settings.queues}
+        snapshot={snapshot}
         onDone={(added) => {
           if (added) setNotice(added);
           void read();
@@ -273,181 +314,174 @@ function Popup() {
         manager={captureApi}
         initialUrl={capture.url}
         initialFilename={capture.filename}
+        duplicateOf={capture.duplicateOf}
         embedded={{ onCancel: () => void discardCapture() }}
         onClose={() => window.close()}
       />
     );
+  const resumeLabel = (job: DownloadJob) =>
+    isActive(job)
+      ? 'Pause'
+      : job.engine === 'browser' &&
+          (!job.browser?.canResume || browserNeedsReview(job.browser.danger))
+        ? 'Review in Chrome'
+        : 'Resume';
   return (
-    <div className="popup-shell">
-      <header className="popup-header">
+    <div className="pm">
+      <header className="pm-head">
         <a
-          className="brand"
+          className="pm-brand"
           href="../manager.html"
           onClick={(event) => {
             event.preventDefault();
             void open();
           }}
         >
-          <span className="brand-mark">
-            <Zap size={22} fill="currentColor" />
-          </span>
-          <span>
-            flux<span className="brand-dot">.</span>
+          <Zap size={20} fill="currentColor" className="pm-bolt" />
+          <span className="pm-word">
+            flux
+            <i className="pm-period" aria-hidden="true" />
           </span>
         </a>
         <button
-          className="icon-button"
+          className="ds-icon-btn"
           aria-label="Open full manager"
           title="Open full manager"
           onClick={() => void open()}
         >
-          <ArrowUpRight size={19} />
+          <ArrowUpRight size={16} />
         </button>
         <button
-          className="icon-button"
+          className="ds-icon-btn"
           aria-label="Open settings"
           title="Settings"
           onClick={() => void open(false, '#settings')}
         >
-          <Settings size={19} />
+          <Settings size={16} />
         </button>
       </header>
-      <div className="popup-speed">
-        <Spark samples={samples} />
-        <span className="eyebrow">LIVE TRANSFER SPEED</span>
-        <div>
-          <span>{bytes(speed)}</span>
-          <small>/s</small>
-        </div>
-        <p>
-          <span className={`live-dot ${active.length ? 'live' : ''}`} />
-          {active.length} active download{active.length === 1 ? '' : 's'}
-        </p>
-      </div>
-      {snapshot && (
-        <div className="popup-capture-state">
-          <ShieldCheck size={15} />
-          <span>
-            {snapshot.settings.interception
-              ? 'Automatic capture is on'
-              : 'Automatic capture is off'}
-          </span>
-          {snapshot.settings.interception && <ChevronRight size={16} className="state-chevron" />}
-          {!snapshot.settings.interception && (
-            <button
-              className="text-button"
-              onClick={() => void enableCapture()}
-              disabled={busy === 'capture'}
-            >
-              Enable
-            </button>
-          )}
-        </div>
+      {active.length ? (
+        <section className="pm-speed" aria-label="Transfer speed">
+          <Spark samples={samples} />
+          <span className="pm-eyebrow">Transfer speed</span>
+          <div className="pm-speed-line">
+            <span className="pm-speed-value">{bytes(speed)}</span>
+            <span className="pm-speed-unit">/s</span>
+          </div>
+          <p>
+            <span className="ds-dot is-live" />
+            {`${active.length} active${waiting ? ` · ${waiting} waiting` : ''}`}
+          </p>
+        </section>
+      ) : (
+        <section className="pm-speed is-idle" aria-label="Transfer speed">
+          <span className="ds-dot" />
+          {waiting ? `Idle · ${waiting} waiting` : 'Idle'}
+        </section>
       )}
-      <div className="popup-list">
-        <div className="section-heading">
-          <h2>Current downloads</h2>
-          <span className="count-badge">{pending.length}</span>
+      <section className="pm-list" aria-label="Current downloads">
+        <div className="pm-label">
+          <span>Downloads</span>
+          <span className="ds-badge">{pending.length}</span>
         </div>
         {!!notice && (
-          <div className="popup-notice" role="status">
-            <ArrowDown size={14} />
-            {notice === 1 ? 'Download added to Flux' : `${notice} downloads added to the queue`}
+          <div className="ds-notice" role="status">
+            <ArrowDown size={16} />
+            {notice === 1 ? 'Download added' : `${notice} downloads added`}
           </div>
         )}
         {error && (
-          <div className="error-message" role="alert">
-            <CircleAlert size={14} /> {error}
+          <div className="ds-notice is-error" role="alert">
+            <CircleAlert size={16} /> {error}
           </div>
         )}
         {!snapshot && !error ? (
-          <div className="popup-empty">
-            <LoaderCircle className="spin" size={24} />
-            <p>Loading your workspace…</p>
+          <div className="pm-empty">
+            <LoaderCircle className="spin" size={16} />
+            <p>Loading</p>
           </div>
         ) : !jobs.length ? (
-          <div className="popup-empty">
-            <ArrowDownToLine size={27} />
-            <h3>Ready for your next file</h3>
-            <p>Add a link or start downloading a file in your browser.</p>
+          <div className="pm-empty">
+            <p>No downloads yet</p>
+            <small>Click a download link on any page and Flux picks it up, or press Add.</small>
           </div>
         ) : (
-          jobs.map((job) => (
-            <div className="popup-job" key={job.id}>
-              <div className="popup-job-heading">
-                <span className={`file-icon ${job.category.toLowerCase()}`}>
-                  {(() => {
-                    const Icon = categoryIcons[job.category] ?? FileIcon;
-                    return <Icon size={20} strokeWidth={1.7} />;
-                  })()}
-                </span>
-                <strong title={job.filename}>{job.filename}</strong>
-                <button
-                  className="icon-button"
-                  aria-label={`${isActive(job) ? 'Pause' : job.engine === 'browser' && (!job.browser?.canResume || browserNeedsReview(job.browser.danger)) ? 'Review in Chrome' : 'Resume'} ${job.filename}`}
-                  onClick={() => void command(job)}
-                  disabled={busy === job.id || job.state === 'PAUSING' || job.state === 'EXPORTING'}
-                >
-                  {busy === job.id ? (
-                    <LoaderCircle className="spin" size={15} />
-                  ) : isActive(job) ? (
-                    <Pause size={15} />
-                  ) : job.engine === 'browser' &&
-                    (!job.browser?.canResume || browserNeedsReview(job.browser.danger)) ? (
-                    <ExternalLink size={15} />
-                  ) : (
-                    <Play size={15} />
-                  )}
-                </button>
-              </div>
-              <div className="progress">
-                <span style={{ width: `${percent(job)}%` }} />
-              </div>
-              <div className="popup-job-meta">
-                <span>
-                  {bytes(job.downloaded)}
-                  {job.total ? ' / ' + bytes(job.total) : ''} · {percent(job).toFixed(0)}%
-                  {isActive(job) ? (
-                    <>
-                      {' '}
-                      · <b className="accent-text">{bytes(job.speed)}/s</b> · {eta(job)} left
-                    </>
-                  ) : (
-                    <> · {stateLabel(job.state)}</>
-                  )}
-                </span>
-              </div>
-              {job.permissionOrigin && (
-                <button className="text-button" onClick={() => void grant(job)}>
-                  Allow access to {hostname(job.permissionOrigin)}
-                </button>
-              )}
-            </div>
-          ))
+          <div className="pm-scroll">
+            {jobs.map((job) => {
+              const Icon = categoryIcons[job.category];
+              return (
+                <div className="pm-row" key={job.id}>
+                  <Icon size={20} strokeWidth={1.5} className="pm-ficon" />
+                  <div className="pm-main">
+                    <strong title={job.filename}>{job.filename}</strong>
+                    <span className="pm-meta">
+                      <span className={`ds-dot ${stateDot(job)}`} />
+                      <span className="pm-meta-text">
+                        {bytes(job.downloaded)}
+                        {job.total ? ` of ${bytes(job.total)}` : ''}
+                        {isActive(job)
+                          ? ` · ${bytes(job.speed)}/s · ${eta(job)} left`
+                          : ` · ${stateLabel(job.state)}`}
+                      </span>
+                    </span>
+                    {(isActive(job) || percent(job) > 0) && (
+                      <span className="ds-bar pm-bar" aria-hidden="true">
+                        <i style={{ width: `${percent(job)}%` }} />
+                      </span>
+                    )}
+                    {job.permissionOrigin && (
+                      <button className="ds-link" onClick={() => void grant(job)}>
+                        Allow access to {hostname(job.permissionOrigin)}
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    className="ds-icon-btn is-small"
+                    aria-label={`${resumeLabel(job)} ${job.filename}`}
+                    title={resumeLabel(job)}
+                    onClick={() => void command(job)}
+                    disabled={
+                      busy === job.id || job.state === 'PAUSING' || job.state === 'EXPORTING'
+                    }
+                  >
+                    {busy === job.id ? (
+                      <LoaderCircle className="spin" size={16} />
+                    ) : isActive(job) ? (
+                      <Pause size={16} />
+                    ) : resumeLabel(job) === 'Review in Chrome' ? (
+                      <ExternalLink size={16} />
+                    ) : (
+                      <Play size={16} />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         )}
-        {pending.length > jobs.length && (
-          <p className="popup-more">+{pending.length - jobs.length} more in the queue</p>
+      </section>
+      <footer className="pm-foot">
+        {snapshot ? (
+          <div className="pm-status">
+            <span className={`ds-dot ${snapshot.settings.interception ? 'is-live' : ''}`} />
+            <span>{snapshot.settings.interception ? 'Capturing downloads' : 'Capture is off'}</span>
+            {!snapshot.settings.interception && (
+              <button
+                className="ds-link"
+                onClick={() => void enableCapture()}
+                disabled={busy === 'capture'}
+              >
+                Turn on
+              </button>
+            )}
+          </div>
+        ) : (
+          <span />
         )}
-      </div>
-      <div className="popup-buttons">
-        <button className="button primary" onClick={() => void open(true)}>
+        <button className="ds-btn is-primary is-small" onClick={() => void open(true)}>
           <Plus size={16} /> Add download
         </button>
-        <button className="button secondary" onClick={() => void open()}>
-          <ExternalLink size={15} /> Open manager
-        </button>
-      </div>
-      <footer className="popup-footer">
-        <ShieldCheck size={12} />
-        <span>
-          {active.length && active.every((job) => job.engine === 'browser')
-            ? 'Original browser transfers continue while Chrome is open.'
-            : 'Keep the manager open during Flux transfers.'}
-        </span>
       </footer>
-      <p className="popup-credit">
-        created by <strong>Vexor</strong>
-      </p>
     </div>
   );
 }

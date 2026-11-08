@@ -76,6 +76,8 @@ export interface DownloadJob {
   url: string;
   filename: string;
   category: Category;
+  /** Set when this one download should go to its own folder inside the download folder. */
+  saveSubfolder?: string;
   state: JobState;
   createdAt: number;
   updatedAt: number;
@@ -101,6 +103,8 @@ export interface DownloadJob {
   timeline: Timeline[];
   exported: boolean;
   exportedAt: number | null;
+  /** The temporary verified copy was deleted after saving, so the file cannot be saved again. */
+  stagedRemoved?: boolean;
   /** Chrome download id of the automatic save into the Downloads folder. */
   savedDownloadId?: number | null;
   activeMs: number;
@@ -145,8 +149,6 @@ export interface Settings {
   downloadsSubfolder: string;
   categoryFolders: Record<Category, string>;
   settingsVersion?: number;
-  /** Set when the browser showed its own save dialog for a Flux save ("ask where to save" is on). */
-  saveDialogDetected?: boolean;
   completionSound: boolean;
   trafficLimit: number;
   trafficPeriodHours: number;
@@ -163,6 +165,8 @@ export interface Settings {
   excludedHosts: string[];
   fileExtensions: string[];
   retentionDays: number;
+  /** Keep the temporary verified copy after saving so Save again works (uses extra disk space). */
+  keepStagedCopy: boolean;
   recovery: 'ask' | 'auto';
   windowStart: string;
   windowEnd: string;
@@ -174,7 +178,7 @@ export const defaultSettings: Settings = {
   confirmCapture: true,
   autoSave: true,
   saveByCategory: true,
-  saveLocation: 'downloads',
+  saveLocation: 'folder',
   downloadsSubfolder: '',
   categoryFolders: {
     Documents: 'Documents',
@@ -185,7 +189,7 @@ export const defaultSettings: Settings = {
     Software: 'Programs',
     Other: 'General',
   },
-  settingsVersion: 2,
+  settingsVersion: 3,
   completionSound: false,
   trafficLimit: 0,
   trafficPeriodHours: 24,
@@ -244,6 +248,7 @@ export const defaultSettings: Settings = {
     'avif',
   ],
   retentionDays: 90,
+  keepStagedCopy: false,
   recovery: 'ask',
   windowStart: '',
   windowEnd: '',
@@ -266,6 +271,8 @@ export interface NewDownload {
   expectedHash?: string;
   /** Overrides the category guessed from the file name. */
   category?: Category;
+  /** A folder inside the chosen download folder, used instead of the category folder. */
+  saveSubfolder?: string;
   /** Per-download connection count (1, 2, 4, 8 or 16) and strategy. */
   maxConnections?: number;
   mode?: 'auto' | 'manual';

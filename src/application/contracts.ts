@@ -64,6 +64,8 @@ export interface ManagerAPI {
   ): Promise<void>;
   exportFile(id: string, saveAs?: boolean): Promise<void>;
   chooseDownloadFolder(): Promise<void>;
+  /** Asks Chrome to restore write access to the chosen folder (needs a click). */
+  restoreFolderAccess(): Promise<void>;
   setAutoSave(enabled: boolean): Promise<void>;
   previewCompletionSound(): Promise<void>;
   browserDownload(id: string): Promise<void>;

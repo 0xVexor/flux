@@ -97,7 +97,7 @@ test('installed MV3 engine: real parallel ranges, final hash, popup and streamed
   expect(fixture.stats.maxActive).toBeGreaterThan(1);
   const popup = await context.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  await expect(popup.getByRole('heading', { name: 'Ready for your next file' })).toBeVisible();
+  await expect(popup.getByText('No active downloads')).toBeVisible();
   await popup.close();
   await page.getByRole('button', { name: 'Close dialog' }).click();
   // Browser test substitutes the picker only, retaining real browser filesystem streaming.

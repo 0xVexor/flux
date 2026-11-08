@@ -1,0 +1,529 @@
+/*
+ * Flux design system. The numbers come from shadcn/ui, so a control here is the size of the
+ * same control there:
+ *   radius   controls 6, cards 12, alerts and calendars 8, checkbox 4
+ *   height   36 (small 32)           spacing   4 · 8 · 12 · 16 · 24
+ *   type     14/20 body and labels, 12/16 helper text, 18 dialog titles
+ *   focus    the border turns to the accent and a 3 px ring at half strength appears
+ *   border   one hairline colour; controls and buttons share it
+ * Colours come from tokens.css. Nothing in this file defines a colour of its own.
+ */
+:root {
+  --ds-radius-sm: 4px;
+  --ds-radius: 6px;
+  --ds-radius-lg: 8px;
+  --ds-radius-xl: 12px;
+  --ds-h: 36px;
+  --ds-h-sm: 32px;
+  --ds-space-1: 4px;
+  --ds-space-2: 8px;
+  --ds-space-3: 12px;
+  --ds-space-4: 16px;
+  --ds-space-6: 24px;
+  --ds-text: 14px;
+  --ds-text-lh: 20px;
+  --ds-small: 12px;
+  --ds-small-lh: 16px;
+  --ds-title: 18px;
+  --ds-bar: 8px;
+  --ds-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent);
+  --ds-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+/* Buttons: primary is the one filled button of a view; the rest are outline or ghost. */
+.ds-btn,
+.ds-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  gap: var(--ds-space-2);
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius);
+  box-shadow: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--ds-text);
+  font-weight: 500;
+  line-height: var(--ds-text-lh);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
+}
+.ds-btn {
+  height: var(--ds-h);
+  padding: 0 var(--ds-space-4);
+}
+.ds-btn.is-small {
+  height: var(--ds-h-sm);
+  padding: 0 var(--ds-space-3);
+  gap: 6px;
+}
+.ds-btn.is-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--ds-shadow-xs);
+}
+.ds-btn.is-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.ds-btn.is-outline {
+  border-color: var(--border);
+  box-shadow: var(--ds-shadow-xs);
+}
+.ds-btn.is-outline:hover:not(:disabled),
+.ds-btn.is-ghost:hover:not(:disabled) {
+  background: var(--hover);
+}
+.ds-btn.is-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.ds-icon-btn {
+  width: var(--ds-h);
+  height: var(--ds-h);
+  padding: 0;
+  color: var(--muted);
+}
+.ds-icon-btn.is-small {
+  width: var(--ds-h-sm);
+  height: var(--ds-h-sm);
+}
+.ds-icon-btn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+.ds-btn:disabled,
+.ds-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+.ds-btn:focus-visible,
+.ds-icon-btn:focus-visible,
+.ds-link:focus-visible,
+.ds-day:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ds-ring);
+}
+
+.ds-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--ds-text);
+  font-weight: 500;
+  line-height: var(--ds-text-lh);
+  text-underline-offset: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+.ds-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+/* Status: a dot and text, never a coloured box. */
+.ds-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.ds-dot.is-live {
+  background: var(--accent);
+}
+.ds-dot.is-warn {
+  background: var(--amber);
+}
+.ds-dot.is-bad {
+  background: var(--danger);
+}
+
+.ds-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px var(--ds-space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius);
+  font-size: var(--ds-small);
+  font-weight: 500;
+  line-height: var(--ds-small-lh);
+  color: var(--text);
+}
+
+/* Progress: a rounded track tinted with the accent and a solid fill. */
+.ds-bar {
+  display: block;
+  height: var(--ds-bar);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  overflow: hidden;
+}
+.ds-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+/* Alert. */
+.ds-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-3) var(--ds-space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-lg);
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  color: var(--text);
+}
+.ds-notice > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.ds-notice.is-error {
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+.ds-notice.is-error > svg {
+  color: inherit;
+}
+input[type='checkbox']:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-ring);
+}
+
+/* Select (Select.tsx): a trigger, and a list in a popover. */
+.ds-select {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+.ds-select-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  width: 100%;
+  height: var(--ds-h);
+  padding: 0 var(--ds-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius);
+  background: transparent;
+  box-shadow: var(--ds-shadow-xs);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.ds-select.is-small .ds-select-trigger {
+  height: var(--ds-h-sm);
+}
+.ds-select-trigger:hover:not(:disabled) {
+  background: var(--hover);
+}
+.ds-select-trigger:focus-visible,
+.ds-select-trigger[aria-expanded='true'] {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ds-ring);
+}
+.ds-select-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ds-select-trigger > svg {
+  flex: none;
+  color: var(--muted);
+}
+.ds-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-select-value.is-empty {
+  color: var(--faint);
+}
+.ds-select-list {
+  position: fixed;
+  z-index: 1000;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--ds-space-1);
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  scrollbar-width: none;
+}
+.ds-select-list::-webkit-scrollbar {
+  display: none;
+}
+.ds-select-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  padding: 6px 32px 6px var(--ds-space-2);
+  border-radius: var(--ds-radius-sm);
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ds-select-item[data-active='true'] {
+  background: var(--hover);
+}
+.ds-select-item[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
+}
+.ds-select-check {
+  position: absolute;
+  right: var(--ds-space-2);
+  color: var(--text);
+}
+.ds-select-group {
+  padding: 6px var(--ds-space-2);
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+.ds-select-sep {
+  height: 1px;
+  margin: var(--ds-space-1) calc(var(--ds-space-1) * -1);
+  background: var(--border);
+}
+/* In the popup the list opens inside the form, like the calendar. */
+.ds-select-list.is-inline {
+  position: static;
+  max-height: 200px;
+  margin-top: var(--ds-space-2);
+  box-shadow: none;
+  /* Leave room for the footer that sticks to the bottom of the popup. */
+  scroll-margin-bottom: 96px;
+}
+
+/* Date and time picker (DateTimePicker.tsx): a calendar above a time field. */
+.ds-datepicker-panel {
+  margin-top: var(--ds-space-2);
+  padding: var(--ds-space-4);
+  scroll-margin-bottom: 96px;
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius);
+  background: var(--surface);
+}
+.ds-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--ds-space-2);
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  color: var(--text);
+}
+.ds-cal-head strong {
+  font-weight: 500;
+}
+.ds-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, var(--ds-h-sm));
+  justify-content: center;
+}
+.ds-cal-weekday {
+  display: grid;
+  place-items: center;
+  height: var(--ds-h-sm);
+  font-size: var(--ds-small);
+  font-weight: 400;
+  color: var(--muted);
+}
+.ds-day {
+  width: var(--ds-h-sm);
+  height: var(--ds-h-sm);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--ds-text);
+  font-weight: 400;
+  cursor: pointer;
+}
+.ds-day:hover:not(:disabled) {
+  background: var(--hover);
+}
+.ds-day.is-outside {
+  color: var(--muted);
+}
+.ds-day.is-today {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.ds-day.is-selected {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.ds-day:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ds-cal-time {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+  margin-top: var(--ds-space-3);
+  padding-top: var(--ds-space-3);
+  border-top: 1px solid var(--border);
+  font-size: var(--ds-text);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text);
+}
+.ds-cal-time input {
+  width: 128px;
+  height: var(--ds-h);
+  padding: 0 var(--ds-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius);
+  background: transparent;
+  box-shadow: var(--ds-shadow-xs);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--ds-text);
+}
+.ds-cal-time input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ds-ring);
+}
+.ds-cal-time input::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+/* Alert with a title, a description and actions (a banner at the top of a page). */
+.ds-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-lg);
+  background: var(--surface);
+  color: var(--text);
+}
+.ds-alert > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.ds-alert.is-warning > svg {
+  color: var(--amber);
+}
+.ds-alert-body {
+  flex: 1;
+  min-width: 0;
+}
+.ds-alert-body strong {
+  display: block;
+  overflow: hidden;
+  font-size: var(--ds-text);
+  font-weight: 500;
+  line-height: var(--ds-text-lh);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-alert-body p {
+  margin: var(--ds-space-1) 0 0;
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  color: var(--muted);
+}
+.ds-alert-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ds-space-2);
+}
+.ds-alert.is-spaced,
+.ds-notice.is-spaced {
+  margin-bottom: var(--ds-space-4);
+}
+.ds-notice-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Toast: a short message that stays in view for a few seconds. */
+.ds-toast {
+  position: fixed;
+  top: var(--ds-space-4);
+  left: 50%;
+  z-index: 1100;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-3);
+  width: min(420px, calc(100vw - 2 * var(--ds-space-4)));
+  padding: var(--ds-space-3) var(--ds-space-3) var(--ds-space-3) var(--ds-space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  transform: translateX(-50%);
+}
+.ds-toast > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.ds-toast-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ds-toast-body strong {
+  font-size: var(--ds-text);
+  font-weight: 500;
+  line-height: var(--ds-text-lh);
+}
+.ds-toast-body span {
+  overflow: hidden;
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}

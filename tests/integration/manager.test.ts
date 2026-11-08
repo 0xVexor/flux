@@ -447,17 +447,16 @@ describe('batch import, named queues and address refresh', () => {
     expect(starts).toHaveLength(2);
     expect(starts[1]!.settings?.trafficLimit).toBe(1024 * 1024);
   });
-  it('emits one queue completion notification and does not request notification access again while stopping the finished queue', async () => {
+  it('announces one queue completion and does not request notification access again while stopping the finished queue', async () => {
     const request = vi.fn(async (_options: { permissions?: string[]; origins?: string[] }) => true);
-    const notify = vi.fn(async (_options: { message: string }) => 'queue-notification');
+    const send = vi.fn(async (_message: { type: string; kind?: string }) => ({ ok: true }));
     vi.stubGlobal('chrome', {
       runtime: {
         id: 'test-extension',
         onMessage: { addListener: vi.fn() },
-        sendMessage: vi.fn(async () => ({ ok: true })),
+        sendMessage: send,
       },
       permissions: { request, contains: vi.fn(async () => true) },
-      notifications: { create: notify },
       alarms: { create: vi.fn(async () => {}) },
     });
     const manager = await initialize();
@@ -481,10 +480,12 @@ describe('batch import, named queues and address refresh', () => {
     for (const job of [...manager.getSnapshot().jobs])
       worker.emit({ type: 'done', job: { ...job, state: 'ASSEMBLING' } });
     await vi.waitFor(() => expect(manager.getSnapshot().settings.queues[0]?.paused).toBe(true));
-    expect(notify).toHaveBeenCalledTimes(1);
-    expect(notify.mock.calls[0]![0]).toMatchObject({
-      message: expect.stringContaining('Notify queue'),
-    });
+    // The background turns this one message into the popup and the system notification.
+    const notices = send.mock.calls
+      .map((call) => call[0])
+      .filter((message) => message.type === 'download-notice');
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({ kind: 'queue', filename: 'Notify queue', waiting: 2 });
     expect(
       request.mock.calls.filter((call) =>
         (call[0] as { permissions?: string[] })?.permissions?.includes('notifications'),
@@ -838,38 +839,6 @@ describe('manager coordination and export', () => {
     expect(manager.getSnapshot().jobs[0]?.state).toBe('COMPLETED');
     expect(aborted).toBe(false);
   });
-  it('retains a successful Downloads-folder save when its final history commit fails', async () => {
-    const download = vi.fn(async () => 42);
-    vi.stubGlobal('chrome', {
-      runtime: { id: 'fixture-extension', onMessage: { addListener: vi.fn() } },
-      downloads: {
-        download,
-        search: vi.fn(async () => [{ id: 42, state: 'complete', filename: 'Downloads/file.bin' }]),
-        onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-      },
-      storage: { session: { set: vi.fn(async () => {}), remove: vi.fn(async () => {}) } },
-    });
-    await new Repository().putSettings({ ...defaultSettings, autoSave: false });
-    const job = verifiedJob(),
-      manager = await initialize([job]);
-    const { Repository: LoadedRepository } = await import('../../src/storage/repository');
-    const original = LoadedRepository.prototype.putJob;
-    vi.spyOn(LoadedRepository.prototype, 'putJob').mockImplementation(async function (
-      this: Repository,
-      snapshot: DownloadJob,
-    ) {
-      if (snapshot.state === 'COMPLETED') throw new Error('Metadata persistence unavailable');
-      return original.call(this, snapshot);
-    });
-    await expect(manager.exportFile(job.id)).rejects.toThrow(/saved successfully.*history/i);
-    expect(download).toHaveBeenCalledTimes(1);
-    expect(manager.getSnapshot().jobs[0]).toMatchObject({
-      state: 'COMPLETED',
-      exported: true,
-      savedDownloadId: 42,
-    });
-  });
-
   it('does not start a queued job removed while another startup was awaiting persistence', async () => {
     const a = createJob({ url: 'https://example.org/a' });
     a.order = 1;
@@ -959,5 +928,180 @@ describe('manager coordination and export', () => {
       vi.clearAllTimers();
       vi.useRealTimers();
     }
+  });
+
+  describe('recovery when the engine changes hands', () => {
+    it('continues only interrupted downloads and leaves user-paused ones paused', async () => {
+      await new Repository().putSettings({ ...defaultSettings, recovery: 'auto' });
+      const running = createJob({ url: 'https://example.org/running.bin' }, defaultSettings);
+      running.state = 'DOWNLOADING';
+      const paused = createJob({ url: 'https://example.org/paused.bin' }, defaultSettings);
+      paused.state = 'PAUSED';
+      const manager = await initialize([running, paused]);
+      const jobs = manager.getSnapshot().jobs;
+      expect(jobs.find((job) => job.id === paused.id)?.state).toBe('PAUSED');
+      expect(jobs.find((job) => job.id === running.id)?.state).not.toBe('PAUSED');
+      const started = ControlledWorker.instances[0]!.commands.filter(
+        (command) => command.type === 'start',
+      ).map((command) => command.job?.id);
+      expect(started).not.toContain(paused.id);
+    });
+  });
+  describe('choosing a download folder', () => {
+    it('refuses a folder the system will not let Flux write to, with a clear reason', async () => {
+      const manager = await initialize();
+      const refused = {
+        name: 'Locked',
+        getFileHandle: async () => {
+          throw new DOMException('Permission denied', 'NotAllowedError');
+        },
+      };
+      (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker = vi.fn(
+        async () => refused,
+      );
+      await expect(manager.chooseDownloadFolder()).rejects.toThrow(
+        /could not write to “Locked”.*NotAllowedError.*Privacy & Security/,
+      );
+      expect(manager.getSnapshot().destination).toBeUndefined();
+    });
+  });
+  describe('a folder chosen for one download', () => {
+    it('saves into that folder instead of the category folder, and keeps it inside the root', async () => {
+      await new Repository().putSettings({ ...defaultSettings, autoSave: true });
+      const job = verifiedJob();
+      job.saveSubfolder = 'Weekly/../Reports';
+      const manager = await initialize([job]);
+      const entered: string[] = [];
+      const file = {
+        createWritable: async () =>
+          new WritableStream<Uint8Array>({
+            write(chunk) {
+              savedBytes.push(chunk.slice());
+            },
+            close() {
+              committed = true;
+            },
+          }),
+      };
+      const handle: Record<string, unknown> = {
+        name: 'Saves',
+        queryPermission: async () => 'granted',
+        requestPermission: async () => 'granted',
+        getDirectoryHandle: async (name: string) => {
+          entered.push(name);
+          return handle;
+        },
+        getFileHandle: async (name: string, options?: { create?: boolean }) => {
+          if (!options?.create) throw new DOMException('missing', 'NotFoundError');
+          return file;
+        },
+      };
+      (manager as unknown as { directory: unknown }).directory = handle;
+      await manager.restoreFolderAccess();
+      await vi.waitFor(() => {
+        expect(manager.getSnapshot().jobs[0]?.state).toBe('COMPLETED');
+      });
+      expect(committed).toBe(true);
+      expect(entered).toEqual(['Weekly', 'Reports']);
+    });
+    it('never lets a typed folder name leave the download folder', () => {
+      const job = createJob(
+        { url: 'https://example.org/a.zip', saveSubfolder: '../../etc/./passwd' },
+        defaultSettings,
+      );
+      expect(job.saveSubfolder).toBe('etc/passwd');
+      expect(
+        createJob({ url: 'https://example.org/a.zip', saveSubfolder: '..' }).saveSubfolder,
+      ).toBe(undefined);
+    });
+  });
+  describe('saving through Flux only', () => {
+    function stubExtension() {
+      const download = vi.fn(async () => 1);
+      const sendMessage = vi.fn(async () => ({}));
+      vi.stubGlobal('chrome', {
+        runtime: { id: 'fixture-extension', onMessage: { addListener: vi.fn() }, sendMessage },
+        downloads: { download },
+        storage: { session: { set: vi.fn(async () => {}), remove: vi.fn(async () => {}) } },
+      });
+      return { download, sendMessage };
+    }
+    function folderHandle() {
+      const created: string[] = [];
+      const entered: string[] = [];
+      const file = {
+        createWritable: async () =>
+          new WritableStream<Uint8Array>({
+            write(chunk) {
+              savedBytes.push(chunk.slice());
+            },
+            close() {
+              committed = true;
+            },
+          }),
+      };
+      const handle: Record<string, unknown> = {
+        name: 'Saves',
+        queryPermission: async () => 'granted',
+        requestPermission: async () => 'granted',
+        getDirectoryHandle: async (name: string) => {
+          entered.push(name);
+          return handle;
+        },
+        getFileHandle: async (name: string, options?: { create?: boolean }) => {
+          if (!options?.create) throw new DOMException('missing', 'NotFoundError');
+          created.push(name);
+          return file;
+        },
+      };
+      return { handle, created, entered };
+    }
+    it('keeps a verified file waiting, without involving Chrome downloads, until a folder is chosen', async () => {
+      const { download } = stubExtension();
+      await new Repository().putSettings({ ...defaultSettings, autoSave: true });
+      const job = verifiedJob();
+      const manager = await initialize([job]);
+      await vi.waitFor(() => {
+        expect(manager.getSnapshot().jobs[0]?.note).toMatch(/Choose a download folder/);
+      });
+      expect(manager.getSnapshot().jobs[0]?.state).toBe('ASSEMBLING');
+      expect(download).not.toHaveBeenCalled();
+    });
+    it('saves waiting files after folder access is restored and announces the save', async () => {
+      const { download, sendMessage } = stubExtension();
+      await new Repository().putSettings({ ...defaultSettings, autoSave: true });
+      const job = verifiedJob();
+      const manager = await initialize([job]);
+      const { handle, created, entered } = folderHandle();
+      (manager as unknown as { directory: unknown }).directory = handle;
+      await manager.restoreFolderAccess();
+      await vi.waitFor(() => {
+        expect(manager.getSnapshot().jobs[0]?.state).toBe('COMPLETED');
+      });
+      expect(committed).toBe(true);
+      expect(created).toEqual([job.filename]);
+      expect(entered).toEqual(['General']);
+      expect(download).not.toHaveBeenCalled();
+      expect(manager.getSnapshot().jobs[0]?.stagedRemoved).toBe(true);
+      await expect(manager.exportFile(job.id)).rejects.toThrow(/temporary copy was deleted/);
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'download-notice',
+          kind: 'saved',
+          filename: job.filename,
+          folder: 'Saves/General',
+        }),
+      );
+    });
+    it('moves older settings to folder saving', async () => {
+      await new Repository().putSettings({
+        ...defaultSettings,
+        saveLocation: 'downloads',
+        settingsVersion: 2,
+      });
+      const settings = await new Repository().getSettings();
+      expect(settings.saveLocation).toBe('folder');
+      expect(settings.settingsVersion).toBe(3);
+    });
   });
 });

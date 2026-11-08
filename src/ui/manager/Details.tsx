@@ -510,6 +510,7 @@ export function Details({
               </button>
             )}
           {!browser &&
+            !job.stagedRemoved &&
             (['ASSEMBLING', 'COMPLETED'].includes(job.state) ||
               (job.state === 'FAILED' && job.sha256)) && (
               <button
@@ -521,6 +522,7 @@ export function Details({
               </button>
             )}
           {!browser &&
+            !job.stagedRemoved &&
             (['ASSEMBLING', 'COMPLETED'].includes(job.state) ||
               (job.state === 'FAILED' && job.sha256)) && (
               <button

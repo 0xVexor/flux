@@ -126,6 +126,7 @@ export function Settings({
       theme: data.get('theme') as SettingsModel['theme'],
       recovery: data.get('recovery') as SettingsModel['recovery'],
       retentionDays: Number(data.get('retentionDays')),
+      keepStagedCopy: data.has('keepStagedCopy'),
       interception: data.has('interception'),
       askQueue: data.has('askQueue'),
       confirmCapture: data.has('confirmCapture'),
@@ -133,7 +134,7 @@ export function Settings({
       categories: data.has('categories'),
       autoSave: data.has('autoSave'),
       saveByCategory: data.has('saveByCategory'),
-      saveLocation: data.get('saveLocation') === 'folder' ? 'folder' : 'downloads',
+      saveLocation: 'folder',
       downloadsSubfolder: folderSegments(String(data.get('downloadsSubfolder') ?? '')).join('/'),
       categoryFolders: Object.fromEntries(
         categoryNames.map((category) => [
@@ -535,8 +536,7 @@ export function Settings({
               <label>
                 Save location
                 <select name="saveLocation" defaultValue={settings.saveLocation}>
-                  <option value="downloads">Chrome Downloads folder</option>
-                  <option value="folder" disabled={!snapshot.destination}>
+                  <option value="folder">
                     {snapshot.destination
                       ? `Chosen folder: ${snapshot.destination.name}`
                       : 'Chosen folder (choose one below first)'}
@@ -544,7 +544,8 @@ export function Settings({
                 </select>
               </label>
               <label>
-                Subfolder in Downloads <span className="optional">optional, e.g. Flux</span>
+                Subfolder in Downloads{' '}
+                <span className="optional">only for files Chrome saves itself, e.g. Flux</span>
                 <input
                   name="downloadsSubfolder"
                   defaultValue={settings.downloadsSubfolder}
@@ -650,7 +651,9 @@ export function Settings({
                 <strong>
                   <Bell size={17} /> Completion notifications
                 </strong>
-                <small>Get notified when a file is ready.</small>
+                <small>
+                  Get notified when a file is saved (or ready to save, if automatic saving is off).
+                </small>
               </span>
               <input name="notifications" type="checkbox" defaultChecked={settings.notifications} />
             </label>
@@ -705,6 +708,20 @@ export function Settings({
             </div>
             <label className="switch-row">
               <span>
+                <strong>Keep a temporary copy after saving</strong>
+                <small>
+                  Lets you press Save again later, but uses extra disk space until the history is
+                  cleared.
+                </small>
+              </span>
+              <input
+                name="keepStagedCopy"
+                type="checkbox"
+                defaultChecked={settings.keepStagedCopy}
+              />
+            </label>
+            <label className="switch-row">
+              <span>
                 <strong>Organize by category</strong>
                 <small>Show file categories in the sidebar.</small>
               </span>
@@ -742,6 +759,8 @@ export function Settings({
               ? `${snapshot.destination.name}${snapshot.destination.authorized ? '' : ' — choose again to restore access'}`
               : 'Optional: choose any folder instead of Chrome’s Downloads folder.'}{' '}
             Category folders are created inside it. Existing filenames receive a numbered suffix.
+            Chrome does not accept Downloads, Documents, Desktop or your home folder itself; use a
+            subfolder such as Downloads/Flux (the folder dialog has a New Folder button).
           </p>
         </div>
         <button

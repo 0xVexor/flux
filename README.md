@@ -1,6 +1,6 @@
 # Flux download manager
 
-Flux is a browser-native Chrome MV3 download manager with a real segmented HTTP engine, persistent OPFS staging, automatic Downloads-folder saving and Save As export. **Version 1.0.0-rc.1 is the local release candidate.** Windows acceptance and remaining release gates are recorded in [the v1 report](docs/release-acceptance-v1.md). Keep the manager tab open during Flux engine transfers. No native host, desktop app, offscreen document, account, or remote processing service is required.
+Flux is a browser-native Chrome MV3 download manager with a real segmented HTTP engine, persistent OPFS staging, automatic saving into a folder you choose, and Save As export. **Version 1.0.0-rc.1 is the local release candidate.** Windows acceptance and remaining release gates are recorded in [the v1 report](docs/release-acceptance-v1.md). Transfers run in the manager tab, or in a hidden extension page while no manager tab is open. No native host, desktop app, account, or remote processing service is required.
 
 This candidate includes DASH, finite live recording, continuous/separate MPEG-TS, compatible discontinuities and bounded site crawling. The historical 0.10 archive and installed extension remain separate; preparing this candidate does not replace an existing installation.
 
@@ -137,6 +137,7 @@ The installed-Chrome route uses CDP `Extensions.loadUnpacked` in an isolated tes
 
 ## Design and release evidence
 
+- [Design system: the agreed interface rules and what is left](docs/design-system.md)
 - [Technical feasibility and official API sources](docs/technical-feasibility.md)
 - [0.6 bounded automatic retry evidence](docs/verification-0.6.md)
 - [0.5 original-browser transfer evidence](docs/verification-0.5.md)

@@ -183,6 +183,11 @@ export class Repository {
       settings.saveLocation = value.autoSave ? 'folder' : 'downloads';
       settings.settingsVersion = 2;
     }
+    if (value && (value.settingsVersion ?? 1) < 3) {
+      // Version 3: Flux writes files itself into a chosen folder, never through Chrome's downloader.
+      settings.saveLocation = 'folder';
+      settings.settingsVersion = 3;
+    }
     return settings;
   }
   putSettings(settings: Settings) {

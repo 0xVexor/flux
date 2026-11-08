@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -9,6 +10,8 @@ import {
 import {
   ArrowDownToLine,
   CalendarDays,
+  ChevronRight,
+  CircleAlert,
   ClipboardPaste,
   ExternalLink,
   Folder,
@@ -22,9 +25,15 @@ import {
 } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import type { ManagerAPI } from '../../application/contracts';
-import { defaultSettings, type Category } from '../../domain/model';
+import { defaultSettings, type Category, type DownloadJob } from '../../domain/model';
+import { stateLabel } from '../components/format';
+import '../ds.css';
 import { validateUrl } from '../../shared/security';
 import { sanitizeFilename } from '../../shared/files';
+import { FolderChoice, folderValue } from '../components/FolderChoice';
+import { Select } from '../components/Select';
+import { MoreOptions } from '../components/MoreOptions';
+import { DateTimePicker } from '../components/DateTimePicker';
 import type { HlsReview } from '../../engine/media/types';
 import type { HlsAudio } from '../../engine/media/hls';
 import type { DashReview, DashSelection } from '../../engine/media/dash';
@@ -82,21 +91,21 @@ function Shell({
       <header className="modal-header">
         <h2>
           <Zap size={20} aria-hidden="true" />
-          Add Download
+          Add download
         </h2>
         <button
           type="button"
-          className="icon-button"
+          className="ds-icon-btn is-small"
           aria-label="Close dialog"
           onClick={embedded.onCancel}
         >
-          <X size={19} />
+          <X size={16} />
         </button>
       </header>
       {children}
     </div>
   ) : (
-    <Modal title="Add Download" onClose={onClose}>
+    <Modal title="Add download" onClose={onClose}>
       {children}
     </Modal>
   );
@@ -108,6 +117,7 @@ export function AddDownload({
   initialMedia,
   initialFilename = '',
   embedded,
+  duplicateOf,
 }: {
   manager: ManagerAPI;
   onClose: () => void;
@@ -116,12 +126,21 @@ export function AddDownload({
   initialFilename?: string;
   /** Rendered inside the toolbar popup: no modal, no HLS review, and Cancel discards the capture. */
   embedded?: { onCancel: () => void };
+  /** A job already in the list for the same file; shown as a warning before this one is added. */
+  duplicateOf?: string;
 }) {
   const snapshot = useSyncExternalStore(manager.subscribe, manager.getSnapshot);
   const destination =
     snapshot.settings.saveLocation === 'folder' ? snapshot.destination : undefined;
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [foundDuplicate, setFoundDuplicate] = useState<DownloadJob | null>(null);
+  const duplicateAcknowledged = useRef(false);
+  const [folderChoice, setFolderChoice] = useState('');
+  const [newFolder, setNewFolder] = useState('');
+  const duplicateJob =
+    foundDuplicate ??
+    (duplicateOf ? snapshot.jobs.find((job) => job.id === duplicateOf) : undefined);
   const formRef = useRef<HTMLFormElement>(null);
   const addOnly = useRef(false);
   const inspection = useRef<AbortController | null>(null);
@@ -248,6 +267,24 @@ export function AddDownload({
     setError('');
     try {
       const link = String(form.get('url')).trim();
+      if (!embedded && !duplicateAcknowledged.current) {
+        // Like a download manager, ask before starting the same file twice.
+        const typedName = String(form.get('filename')).trim().toLowerCase();
+        const address = validateUrl(link).href;
+        const same = snapshot.jobs.find(
+          (job) =>
+            job.engine !== 'browser' &&
+            !job.capturePending &&
+            !['CANCELED', 'FAILED'].includes(job.state) &&
+            (job.url === address || (!!typedName && job.filename.toLowerCase() === typedName)),
+        );
+        if (same) {
+          duplicateAcknowledged.current = true;
+          setFoundDuplicate(same);
+          setBusy(false);
+          return;
+        }
+      }
       if (kind === 'hls' && (review?.kind !== 'media' || review.url !== validateUrl(link).href))
         throw new Error('Review the selected HLS rendition before adding it.');
       if (
@@ -257,6 +294,7 @@ export function AddDownload({
           JSON.stringify(dashReview.selection) !== JSON.stringify(dashSelection))
       )
         throw new Error('Review the selected DASH video and audio before adding it.');
+      if (scheduled && !form.get('schedule')) throw new Error('Choose a start time.');
       const connectionCount = split ? connections : 1;
       await manager.add({
         url: link,
@@ -282,6 +320,7 @@ export function AddDownload({
         queueId: String(form.get('queueId')),
         startPaused: onlyAdd || (!startNow && !scheduled),
         category: (category as Category) || undefined,
+        saveSubfolder: folderValue(folderChoice, newFolder),
         maxConnections: kind !== 'file' ? undefined : connectionCount,
         mode: kind !== 'file' ? undefined : mode,
       });
@@ -338,6 +377,56 @@ export function AddDownload({
       setBusy(false);
     }
   }
+  const essentials = (
+    <>
+      {duplicateJob && (
+        <div className="ds-notice" role="alert">
+          <CircleAlert size={16} />
+          <span>
+            <strong>{duplicateJob.filename}</strong> is already in your list (
+            {stateLabel(duplicateJob.state).toLowerCase()}).{' '}
+            {embedded
+              ? 'Rename it to keep both, or cancel.'
+              : 'Change the file name to keep both, or press Add again to add it anyway.'}
+          </span>
+        </div>
+      )}
+      <div className="row">
+        <label htmlFor="add-filename">File name</label>
+        <input
+          id="add-filename"
+          name="filename"
+          placeholder="Use the server's filename"
+          defaultValue={initialFilename}
+          aria-label="File name optional"
+        />
+      </div>
+      {embedded ? (
+        <FolderChoice
+          settings={snapshot.settings}
+          destination={destination}
+          choice={folderChoice}
+          onChoice={setFolderChoice}
+          typed={newFolder}
+          onTyped={setNewFolder}
+        />
+      ) : (
+        <div className="row">
+          <span className="row-label">Save to</span>
+          <div className="row-pair">
+            <div className="fake-input">
+              <Folder size={16} />
+              <span>{destination?.name ?? 'Downloads'}</span>
+            </div>
+            <button type="button" className="ds-btn is-outline" onClick={() => void chooseFolder()}>
+              Change
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+  const Wrap = embedded ? MoreOptions : Fragment;
   return (
     <Shell embedded={embedded} onClose={onClose}>
       <form
@@ -345,133 +434,116 @@ export function AddDownload({
         onSubmit={(event) => void submit(event)}
         onInvalid={(event) => {
           const panel = (event.target as HTMLElement).closest<HTMLElement>('[data-panel]');
+          (event.target as HTMLElement).closest('details')?.setAttribute('open', '');
           if (panel?.dataset.panel) setTab(panel.dataset.panel as Tab);
         }}
         className="form-stack add-form"
       >
-        <div className="add-url">
-          <div className="input-icon">
-            <Link2 size={17} />
-            <input
-              name="url"
-              type="url"
-              required
-              autoFocus
-              aria-label="Download URL"
-              value={url}
-              onChange={(event) => changeUrl(event.target.value)}
-              aria-describedby="download-url-help"
-              placeholder="https://example.com/file.zip"
-            />
-            {url && (
-              <button
-                type="button"
-                className="icon-button url-clear"
-                aria-label="Clear URL"
-                onClick={() => changeUrl('')}
-              >
-                <X size={16} />
-              </button>
+        {embedded ? (
+          <input type="hidden" name="url" value={url} />
+        ) : (
+          <div className="add-url">
+            <div className="input-icon">
+              <Link2 size={16} />
+              <input
+                name="url"
+                type="url"
+                required
+                autoFocus
+                aria-label="Download URL"
+                value={url}
+                onChange={(event) => changeUrl(event.target.value)}
+                aria-describedby="download-url-help"
+                placeholder="https://example.com/file.zip"
+              />
+              {url && (
+                <button
+                  type="button"
+                  className="ds-icon-btn is-small url-clear"
+                  aria-label="Clear URL"
+                  onClick={() => changeUrl('')}
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+            {!url && (
+              <div className="add-url-actions">
+                <button
+                  type="button"
+                  className="ds-btn is-outline is-small"
+                  onClick={() => void paste()}
+                >
+                  <ClipboardPaste size={16} /> Paste from clipboard
+                </button>
+              </div>
             )}
           </div>
-          <div className="add-url-actions">
-            <button type="button" className="button secondary" onClick={() => void paste()}>
-              <ClipboardPaste size={15} /> Paste from clipboard
-            </button>
-            <button
-              type="button"
-              className="button primary"
-              disabled={busy}
-              title="Add to the list without starting"
-              onClick={() => {
-                addOnly.current = true;
-                formRef.current?.requestSubmit();
-              }}
-            >
-              Add
-            </button>
-          </div>
-        </div>
+        )}
         <p id="download-url-help" className="sr-only">
           Review the link before downloading. If a server does not work with Flux, use the browser
           downloader on the Advanced tab.
         </p>
-        <div className="tabs" role="tablist" aria-label="Download options">
-          {tabs.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={tab === id}
-              id={`add-tab-${id}`}
-              aria-controls={`add-panel-${id}`}
-              tabIndex={tab === id ? 0 : -1}
-              className={tab === id ? 'selected' : ''}
-              onKeyDown={(event) => {
-                const current = tabs.findIndex((item) => item.id === id);
-                const index =
-                  event.key === 'ArrowRight'
-                    ? (current + 1) % tabs.length
-                    : event.key === 'ArrowLeft'
-                      ? (current + tabs.length - 1) % tabs.length
-                      : event.key === 'Home'
-                        ? 0
-                        : event.key === 'End'
-                          ? tabs.length - 1
-                          : -1;
-                if (index < 0) return;
-                event.preventDefault();
-                const next = tabs[index];
-                if (!next) return;
-                setTab(next.id);
-                document.getElementById(`add-tab-${next.id}`)?.focus();
-              }}
-              onClick={() => setTab(id)}
-            >
-              <Icon size={16} />
-              {label}
-            </button>
-          ))}
-        </div>
-        <div
-          id="add-panel-general"
-          role="tabpanel"
-          aria-labelledby="add-tab-general"
-          data-panel="general"
-          hidden={tab !== 'general'}
-          className="panel"
-        >
-          <div className="row">
-            <label htmlFor="add-filename">File name</label>
-            <input
-              id="add-filename"
-              name="filename"
-              placeholder="Use the server's filename"
-              defaultValue={initialFilename}
-              aria-label="File name optional"
-            />
+        {embedded && (
+          <div className="add-essentials">
+            <p className="add-host">
+              <Link2 size={16} aria-hidden="true" />
+              {siteHost(url) || 'Download link'}
+            </p>
+            {essentials}
           </div>
-          <div className="row">
-            <span className="row-label">Save to</span>
-            <div className="row-pair">
-              <div className="fake-input">
-                <Folder size={16} />
-                <span>{destination?.name ?? 'Downloads'}</span>
-              </div>
+        )}
+        <Wrap>
+          <div className="tabs" role="tablist" aria-label="Download options">
+            {tabs.map(({ id, label, Icon }) => (
               <button
+                key={id}
                 type="button"
-                className="button secondary"
-                onClick={() => void chooseFolder()}
+                role="tab"
+                aria-selected={tab === id}
+                id={`add-tab-${id}`}
+                aria-controls={`add-panel-${id}`}
+                tabIndex={tab === id ? 0 : -1}
+                className={tab === id ? 'selected' : ''}
+                onKeyDown={(event) => {
+                  const current = tabs.findIndex((item) => item.id === id);
+                  const index =
+                    event.key === 'ArrowRight'
+                      ? (current + 1) % tabs.length
+                      : event.key === 'ArrowLeft'
+                        ? (current + tabs.length - 1) % tabs.length
+                        : event.key === 'Home'
+                          ? 0
+                          : event.key === 'End'
+                            ? tabs.length - 1
+                            : -1;
+                  if (index < 0) return;
+                  event.preventDefault();
+                  const next = tabs[index];
+                  if (!next) return;
+                  setTab(next.id);
+                  document.getElementById(`add-tab-${next.id}`)?.focus();
+                }}
+                onClick={() => setTab(id)}
               >
-                Change
+                <Icon size={16} />
+                {label}
               </button>
-            </div>
+            ))}
           </div>
-          <div className="row">
-            <label htmlFor="add-category">Category</label>
-            <div className="input-icon">
-              <LayoutGrid size={16} />
-              <select
+          <div
+            id="add-panel-general"
+            role="tabpanel"
+            aria-labelledby="add-tab-general"
+            data-panel="general"
+            hidden={tab !== 'general'}
+            className="panel"
+          >
+            {!embedded && essentials}
+            <div className="row">
+              <label htmlFor="add-category">Category</label>
+              <Select
+                icon={<LayoutGrid size={16} />}
                 id="add-category"
                 name="category"
                 value={category}
@@ -483,482 +555,482 @@ export function AddDownload({
                     {name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
-          </div>
-          <div className="checks">
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={startNow}
-                onChange={(event) => setStartNow(event.target.checked)}
-              />
-              Start download immediately
-            </label>
-            <div className="check-line">
+            <div className="checks">
               <label className="check">
                 <input
                   type="checkbox"
-                  checked={split}
-                  onChange={(event) => setSplit(event.target.checked)}
+                  checked={startNow}
+                  onChange={(event) => setStartNow(event.target.checked)}
                 />
-                Split into multiple connections
+                Start download immediately
               </label>
-              <select
-                aria-label="Connections"
-                value={connections}
-                disabled={!split}
-                onChange={(event) => setConnections(Number(event.target.value))}
+              <div className="check-line">
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={split}
+                    onChange={(event) => setSplit(event.target.checked)}
+                  />
+                  Split into multiple connections
+                </label>
+                <Select
+                  size="sm"
+                  aria-label="Connections"
+                  value={connections}
+                  disabled={!split}
+                  onChange={(event) => setConnections(Number(event.target.value))}
+                >
+                  {[2, 4, 8, 16].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={scheduled}
+                  onChange={(event) => {
+                    setScheduled(event.target.checked);
+                    if (event.target.checked) setTab('schedule');
+                  }}
+                />
+                Schedule download
+              </label>
+            </div>
+          </div>
+          <div
+            id="add-panel-advanced"
+            role="tabpanel"
+            aria-labelledby="add-tab-advanced"
+            data-panel="advanced"
+            hidden={tab !== 'advanced'}
+            className="panel"
+          >
+            <div className="row" hidden={!!embedded}>
+              <label htmlFor="add-kind">Download type</label>
+              <Select
+                id="add-kind"
+                value={kind}
+                onChange={(event) => {
+                  inspection.current?.abort();
+                  setBusy(false);
+                  setKind(event.target.value as 'file' | 'hls' | 'dash');
+                  setReview(null);
+                  setDashReview(null);
+                  setDashSelection(undefined);
+                  setGrant(null);
+                }}
               >
-                {[2, 4, 8, 16].map((n) => (
+                <option value="file">Direct file</option>
+                <option value="hls">HLS video / live recording</option>
+                <option value="dash">DASH video / live recording</option>
+              </Select>
+            </div>
+            {kind === 'hls' && (
+              <div className="form-stack">
+                <p className="small muted">
+                  Review H.264/AAC HLS and choose a quality. Separate MP4 audio can be combined for
+                  completed media. A live rendition with audio included can be recorded for a chosen
+                  duration or finished manually. MP4 and continuous MPEG-TS parts produce MP4; the
+                  first TS part needs a keyframe. Clear or ordinary AES-128 is supported. TS parts
+                  are limited to 16 MiB. Completed streams support separate audio and compatible
+                  discontinuities; a new TS period needs a keyframe.
+                </p>
+                <button
+                  type="button"
+                  className="ds-btn is-outline"
+                  disabled={busy}
+                  onClick={() => void preview()}
+                >
+                  Review HLS playlist
+                </button>
+                {grant && (
+                  <button
+                    type="button"
+                    className="ds-btn is-outline"
+                    disabled={busy}
+                    onClick={() =>
+                      void preview(
+                        review?.kind === 'master' ? variant : undefined,
+                        grant,
+                        audioChoice || undefined,
+                      )
+                    }
+                  >
+                    Allow stream website
+                  </button>
+                )}
+                {review?.kind === 'master' && (
+                  <>
+                    <label>
+                      Video quality
+                      <Select
+                        value={variant}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setVariant(value);
+                          const group = review.variants.find(
+                            (item) => item.url === value,
+                          )?.audioGroup;
+                          const choices = review.audio.filter((item) => item.group === group),
+                            selected = choices.find((item) => item.default) ?? choices[0];
+                          setAudioChoice(selected?.url ?? '');
+                          setAudioLabel(selected ? audioName(selected) : '');
+                        }}
+                      >
+                        {review.variants.map((item) => (
+                          <option key={item.url} value={item.url}>
+                            {item.resolution ?? 'Rendition'} · {Math.round(item.bandwidth / 1000)}{' '}
+                            kb/s
+                            {item.externalAudio ? ' · choose audio' : ''}
+                          </option>
+                        ))}
+                      </Select>
+                    </label>
+                    {review.audio.some(
+                      (item) =>
+                        item.group ===
+                        review.variants.find((variantOption) => variantOption.url === variant)
+                          ?.audioGroup,
+                    ) && (
+                      <label>
+                        Audio / language
+                        <Select
+                          value={audioChoice}
+                          onChange={(event) => {
+                            setAudioChoice(event.target.value);
+                            const choice = review.audio.find(
+                              (item) => item.url === event.target.value,
+                            );
+                            setAudioLabel(choice ? audioName(choice) : '');
+                          }}
+                        >
+                          {review.audio
+                            .filter(
+                              (item) =>
+                                item.group ===
+                                review.variants.find((option) => option.url === variant)
+                                  ?.audioGroup,
+                            )
+                            .map((item) => (
+                              <option key={item.name} value={item.url ?? ''}>
+                                {audioName(item)}
+                                {item.default ? ' · default' : ''}
+                              </option>
+                            ))}
+                        </Select>
+                      </label>
+                    )}
+                    <button
+                      type="button"
+                      className="ds-btn is-outline"
+                      disabled={busy || !variant}
+                      onClick={() => void preview(variant, undefined, audioChoice || undefined)}
+                    >
+                      Review selected quality
+                    </button>
+                  </>
+                )}
+                {review?.kind === 'media' && (
+                  <>
+                    {review.live && (
+                      <label>
+                        Recording duration (minutes)
+                        <input
+                          type="number"
+                          min="0.017"
+                          max="1440"
+                          step="any"
+                          value={recordingMinutes}
+                          onChange={(event) => setRecordingMinutes(event.target.value)}
+                        />
+                        <span className="small muted">
+                          Record from the available live window. Use Finish recording to save
+                          earlier. Keep this manager open. A missed segment stops recording and
+                          retains verified parts.
+                        </span>
+                      </label>
+                    )}
+                    <p role="status">
+                      {review.parts} media parts · {review.duration.toFixed(1)} seconds. Output:
+                      MP4.
+                      {review.audioUrl && (
+                        <> Selected audio: {audioLabel}. Separate tracks will be combined.</>
+                      )}
+                      {review.encrypted &&
+                        ' AES-128: public key resources will be requested with the listed website permissions. Encrypted parts are limited to 16 MiB.'}
+                      Container and source identity are checked before saving.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+            {kind === 'dash' && (
+              <div className="form-stack">
+                <p className="small muted">
+                  Review unprotected H.264/AAC DASH. Select video quality and audio, then review the
+                  selection. Completed periods produce MP4; a dynamic manifest can be recorded for a
+                  chosen duration or finished manually.
+                </p>
+                <button
+                  type="button"
+                  className="ds-btn is-outline"
+                  disabled={busy}
+                  onClick={() => void preview()}
+                >
+                  Review DASH manifest
+                </button>
+                {grant && (
+                  <button
+                    type="button"
+                    className="ds-btn is-outline"
+                    disabled={busy}
+                    onClick={() => void preview(undefined, grant)}
+                  >
+                    Allow stream website
+                  </button>
+                )}
+                {dashReview && dashSelection && (
+                  <>
+                    {dashReview.live && (
+                      <label>
+                        Recording duration (minutes)
+                        <input
+                          type="number"
+                          min="0.017"
+                          max="1440"
+                          step="any"
+                          value={recordingMinutes}
+                          onChange={(event) => setRecordingMinutes(event.target.value)}
+                        />
+                        <span className="small muted">
+                          Keep this manager open. Finish recording saves the verified video and
+                          audio already received.
+                        </span>
+                      </label>
+                    )}
+                    <label>
+                      Video quality
+                      <Select
+                        aria-label="DASH video quality"
+                        value={dashSelection.videoId}
+                        onChange={(event) =>
+                          setDashSelection({ ...dashSelection, videoId: event.target.value })
+                        }
+                      >
+                        {dashReview.choices
+                          .filter((item) => item.kind === 'video')
+                          .map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.width && item.height ? `${item.width}×${item.height}` : item.id}{' '}
+                              · {Math.round(item.bandwidth / 1000)} kb/s
+                            </option>
+                          ))}
+                      </Select>
+                    </label>
+                    <label>
+                      Audio / language
+                      <Select
+                        aria-label="DASH audio language"
+                        value={dashSelection.audioId ?? ''}
+                        onChange={(event) =>
+                          setDashSelection({ ...dashSelection, audioId: event.target.value })
+                        }
+                      >
+                        <option value="">No external audio / use embedded audio</option>
+                        {dashReview.choices
+                          .filter((item) => item.kind === 'audio')
+                          .map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.language ?? item.id} · {Math.round(item.bandwidth / 1000)} kb/s
+                            </option>
+                          ))}
+                      </Select>
+                    </label>
+                    <button
+                      type="button"
+                      className="ds-btn is-outline"
+                      disabled={busy}
+                      onClick={() => void preview()}
+                    >
+                      Review selected DASH tracks
+                    </button>
+                    {JSON.stringify(dashSelection) === JSON.stringify(dashReview.selection) && (
+                      <p role="status">
+                        {dashReview.parts} media parts · {dashReview.duration.toFixed(1)} seconds.
+                        Output: MP4. Selected video: {dashSelection.videoId}; audio:{' '}
+                        {dashSelection.audioId || 'embedded'}. Both sources are checked on resume.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+            <div className="row">
+              <label htmlFor="add-mode">Connection mode</label>
+              <Select
+                id="add-mode"
+                aria-describedby="connection-mode-help"
+                value={mode}
+                onChange={(event) => setMode(event.target.value as 'auto' | 'manual')}
+              >
+                <option value="auto">Adaptive (recommended)</option>
+                <option value="manual">Manual</option>
+              </Select>
+            </div>
+            <p id="connection-mode-help" className="connection-help">
+              {mode === 'auto'
+                ? 'Adaptive adjusts the number of connections as the file downloads, up to your maximum.'
+                : 'Manual uses your selected connection count when the server supports it.'}
+            </p>
+            <div className="row">
+              <label htmlFor="add-max">Maximum connections</label>
+              <Select
+                id="add-max"
+                value={split ? connections : 1}
+                onChange={(event) => {
+                  const n = Number(event.target.value);
+                  setSplit(n > 1);
+                  if (n > 1) setConnections(n);
+                }}
+              >
+                {[1, 2, 4, 8, 16].map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={scheduled}
-                onChange={(event) => {
-                  setScheduled(event.target.checked);
-                  if (event.target.checked) setTab('schedule');
-                }}
-              />
-              Schedule download
-            </label>
-          </div>
-        </div>
-        <div
-          id="add-panel-advanced"
-          role="tabpanel"
-          aria-labelledby="add-tab-advanced"
-          data-panel="advanced"
-          hidden={tab !== 'advanced'}
-          className="panel"
-        >
-          <div className="row" hidden={!!embedded}>
-            <label htmlFor="add-kind">Download type</label>
-            <select
-              id="add-kind"
-              value={kind}
-              onChange={(event) => {
-                inspection.current?.abort();
-                setBusy(false);
-                setKind(event.target.value as 'file' | 'hls' | 'dash');
-                setReview(null);
-                setDashReview(null);
-                setDashSelection(undefined);
-                setGrant(null);
-              }}
-            >
-              <option value="file">Direct file</option>
-              <option value="hls">HLS video / live recording</option>
-              <option value="dash">DASH video / live recording</option>
-            </select>
-          </div>
-          {kind === 'hls' && (
-            <div className="form-stack">
-              <p className="small muted">
-                Review H.264/AAC HLS and choose a quality. Separate MP4 audio can be combined for
-                completed media. A live rendition with audio included can be recorded for a chosen
-                duration or finished manually. MP4 and continuous MPEG-TS parts produce MP4; the
-                first TS part needs a keyframe. Clear or ordinary AES-128 is supported. TS parts are
-                limited to 16 MiB. Completed streams support separate audio and compatible
-                discontinuities; a new TS period needs a keyframe.
-              </p>
-              <button
-                type="button"
-                className="button secondary"
-                disabled={busy}
-                onClick={() => void preview()}
-              >
-                Review HLS playlist
-              </button>
-              {grant && (
-                <button
-                  type="button"
-                  className="button secondary"
-                  disabled={busy}
-                  onClick={() =>
-                    void preview(
-                      review?.kind === 'master' ? variant : undefined,
-                      grant,
-                      audioChoice || undefined,
-                    )
-                  }
-                >
-                  Allow stream website
-                </button>
-              )}
-              {review?.kind === 'master' && (
-                <>
-                  <label>
-                    Video quality
-                    <select
-                      value={variant}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setVariant(value);
-                        const group = review.variants.find(
-                          (item) => item.url === value,
-                        )?.audioGroup;
-                        const choices = review.audio.filter((item) => item.group === group),
-                          selected = choices.find((item) => item.default) ?? choices[0];
-                        setAudioChoice(selected?.url ?? '');
-                        setAudioLabel(selected ? audioName(selected) : '');
-                      }}
-                    >
-                      {review.variants.map((item) => (
-                        <option key={item.url} value={item.url}>
-                          {item.resolution ?? 'Rendition'} · {Math.round(item.bandwidth / 1000)}{' '}
-                          kb/s
-                          {item.externalAudio ? ' · choose audio' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {review.audio.some(
-                    (item) =>
-                      item.group ===
-                      review.variants.find((variantOption) => variantOption.url === variant)
-                        ?.audioGroup,
-                  ) && (
-                    <label>
-                      Audio / language
-                      <select
-                        value={audioChoice}
-                        onChange={(event) => {
-                          setAudioChoice(event.target.value);
-                          const choice = review.audio.find(
-                            (item) => item.url === event.target.value,
-                          );
-                          setAudioLabel(choice ? audioName(choice) : '');
-                        }}
-                      >
-                        {review.audio
-                          .filter(
-                            (item) =>
-                              item.group ===
-                              review.variants.find((option) => option.url === variant)?.audioGroup,
-                          )
-                          .map((item) => (
-                            <option key={item.name} value={item.url ?? ''}>
-                              {audioName(item)}
-                              {item.default ? ' · default' : ''}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                  )}
-                  <button
-                    type="button"
-                    className="button secondary"
-                    disabled={busy || !variant}
-                    onClick={() => void preview(variant, undefined, audioChoice || undefined)}
-                  >
-                    Review selected quality
-                  </button>
-                </>
-              )}
-              {review?.kind === 'media' && (
-                <>
-                  {review.live && (
-                    <label>
-                      Recording duration (minutes)
-                      <input
-                        type="number"
-                        min="0.017"
-                        max="1440"
-                        step="any"
-                        value={recordingMinutes}
-                        onChange={(event) => setRecordingMinutes(event.target.value)}
-                      />
-                      <span className="small muted">
-                        Record from the available live window. Use Finish recording to save earlier.
-                        Keep this manager open. A missed segment stops recording and retains
-                        verified parts.
-                      </span>
-                    </label>
-                  )}
-                  <p role="status">
-                    {review.parts} media parts · {review.duration.toFixed(1)} seconds. Output: MP4.
-                    {review.audioUrl && (
-                      <> Selected audio: {audioLabel}. Separate tracks will be combined.</>
-                    )}
-                    {review.encrypted &&
-                      ' AES-128: public key resources will be requested with the listed website permissions. Encrypted parts are limited to 16 MiB.'}
-                    Container and source identity are checked before saving.
-                  </p>
-                </>
-              )}
-            </div>
-          )}
-          {kind === 'dash' && (
-            <div className="form-stack">
-              <p className="small muted">
-                Review unprotected H.264/AAC DASH. Select video quality and audio, then review the
-                selection. Completed periods produce MP4; a dynamic manifest can be recorded for a
-                chosen duration or finished manually.
-              </p>
-              <button
-                type="button"
-                className="button secondary"
-                disabled={busy}
-                onClick={() => void preview()}
-              >
-                Review DASH manifest
-              </button>
-              {grant && (
-                <button
-                  type="button"
-                  className="button secondary"
-                  disabled={busy}
-                  onClick={() => void preview(undefined, grant)}
-                >
-                  Allow stream website
-                </button>
-              )}
-              {dashReview && dashSelection && (
-                <>
-                  {dashReview.live && (
-                    <label>
-                      Recording duration (minutes)
-                      <input
-                        type="number"
-                        min="0.017"
-                        max="1440"
-                        step="any"
-                        value={recordingMinutes}
-                        onChange={(event) => setRecordingMinutes(event.target.value)}
-                      />
-                      <span className="small muted">
-                        Keep this manager open. Finish recording saves the verified video and audio
-                        already received.
-                      </span>
-                    </label>
-                  )}
-                  <label>
-                    Video quality
-                    <select
-                      aria-label="DASH video quality"
-                      value={dashSelection.videoId}
-                      onChange={(event) =>
-                        setDashSelection({ ...dashSelection, videoId: event.target.value })
-                      }
-                    >
-                      {dashReview.choices
-                        .filter((item) => item.kind === 'video')
-                        .map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.width && item.height ? `${item.width}×${item.height}` : item.id} ·{' '}
-                            {Math.round(item.bandwidth / 1000)} kb/s
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                  <label>
-                    Audio / language
-                    <select
-                      aria-label="DASH audio language"
-                      value={dashSelection.audioId ?? ''}
-                      onChange={(event) =>
-                        setDashSelection({ ...dashSelection, audioId: event.target.value })
-                      }
-                    >
-                      <option value="">No external audio / use embedded audio</option>
-                      {dashReview.choices
-                        .filter((item) => item.kind === 'audio')
-                        .map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.language ?? item.id} · {Math.round(item.bandwidth / 1000)} kb/s
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    className="button secondary"
-                    disabled={busy}
-                    onClick={() => void preview()}
-                  >
-                    Review selected DASH tracks
-                  </button>
-                  {JSON.stringify(dashSelection) === JSON.stringify(dashReview.selection) && (
-                    <p role="status">
-                      {dashReview.parts} media parts · {dashReview.duration.toFixed(1)} seconds.
-                      Output: MP4. Selected video: {dashSelection.videoId}; audio:{' '}
-                      {dashSelection.audioId || 'embedded'}. Both sources are checked on resume.
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-          <div className="row">
-            <label htmlFor="add-mode">Connection mode</label>
-            <select
-              id="add-mode"
-              aria-describedby="connection-mode-help"
-              value={mode}
-              onChange={(event) => setMode(event.target.value as 'auto' | 'manual')}
-            >
-              <option value="auto">Adaptive (recommended)</option>
-              <option value="manual">Manual</option>
-            </select>
-          </div>
-          <p id="connection-mode-help" className="connection-help">
-            {mode === 'auto'
-              ? 'Adaptive adjusts the number of connections as the file downloads, up to your maximum.'
-              : 'Manual uses your selected connection count when the server supports it.'}
-          </p>
-          <div className="row">
-            <label htmlFor="add-max">Maximum connections</label>
-            <select
-              id="add-max"
-              value={split ? connections : 1}
-              onChange={(event) => {
-                const n = Number(event.target.value);
-                setSplit(n > 1);
-                if (n > 1) setConnections(n);
-              }}
-            >
-              {[1, 2, 4, 8, 16].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="row">
-            <label htmlFor="add-speed">Speed limit</label>
-            <div className="speed-row">
-              <input
-                id="add-speed"
-                type="number"
-                min="0"
-                value={speed}
-                onChange={(event) => setSpeed(event.target.value)}
-              />
-              <select
-                aria-label="Speed unit"
-                value={unit}
-                onChange={(event) => setUnit(event.target.value as 'KB' | 'MB')}
-              >
-                <option value="KB">KB/s</option>
-                <option value="MB">MB/s</option>
-              </select>
-              <span className="muted small">(0 = unlimited)</span>
-            </div>
-          </div>
-          <div className="row">
-            <span className="row-label">Use browser cookies</span>
-            <span
-              className="switch-static"
-              title="Use the session only on the download URL's origin; other hosts receive no cookies."
-            >
-              <input
-                type="checkbox"
-                checked={useBrowserCookies}
-                onChange={(event) => {
-                  inspection.current?.abort();
-                  setBusy(false);
-                  setReview(null);
-                  setDashReview(null);
-                  setUseBrowserCookies(event.target.checked);
-                }}
-                aria-label="Use browser cookies"
-              />
-            </span>
-          </div>
-          <div className="row">
-            <span className="row-label">Referrer</span>
-            <span className="muted">Omitted</span>
-          </div>
-          <div className="row">
-            <span className="row-label">User agent</span>
-            <span className="muted">Chrome default</span>
-          </div>
-          <div className="row">
-            <label htmlFor="add-hash">Expected SHA-256</label>
-            <input
-              id="add-hash"
-              name="hash"
-              minLength={64}
-              maxLength={64}
-              pattern="[a-fA-F0-9]{64}"
-              placeholder="optional · 64-character checksum"
-              spellCheck={false}
-            />
-          </div>
-          <button
-            type="button"
-            className="text-button browser-fallback"
-            onClick={() => void useBrowser()}
-            disabled={busy || kind !== 'file'}
-          >
-            <ExternalLink size={14} /> Use browser
-          </button>
-        </div>
-        <div
-          id="add-panel-schedule"
-          role="tabpanel"
-          aria-labelledby="add-tab-schedule"
-          data-panel="schedule"
-          hidden={tab !== 'schedule'}
-          className="panel"
-        >
-          <div className="row">
-            <label htmlFor="add-queue">Download queue</label>
-            <select id="add-queue" name="queueId" defaultValue="default">
-              <option value="default">Default queue</option>
-              {snapshot.settings.queues.map((queue) => (
-                <option key={queue.id} value={queue.id}>
-                  {queue.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="row">
-            <label htmlFor="add-priority">Priority</label>
-            <select id="add-priority" name="priority" defaultValue="0">
-              <option value="2">High</option>
-              <option value="0">Normal</option>
-              <option value="-2">Low</option>
-            </select>
-          </div>
-          <div className="checks">
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={scheduled}
-                onChange={(event) => setScheduled(event.target.checked)}
-              />
-              Schedule download
-            </label>
-          </div>
-          {scheduled && (
             <div className="row">
-              <label htmlFor="add-time">Start time</label>
+              <label htmlFor="add-speed">Speed limit</label>
+              <div className="speed-row">
+                <input
+                  id="add-speed"
+                  type="number"
+                  min="0"
+                  value={speed}
+                  onChange={(event) => setSpeed(event.target.value)}
+                />
+                <Select
+                  size="sm"
+                  aria-label="Speed unit"
+                  value={unit}
+                  onChange={(event) => setUnit(event.target.value as 'KB' | 'MB')}
+                >
+                  <option value="KB">KB/s</option>
+                  <option value="MB">MB/s</option>
+                </Select>
+                <span className="muted small">(0 = unlimited)</span>
+              </div>
+            </div>
+            <div className="row">
+              <span className="row-label">Use browser cookies</span>
+              <span
+                className="switch-static"
+                title="Use the session only on the download URL's origin; other hosts receive no cookies."
+              >
+                <input
+                  type="checkbox"
+                  checked={useBrowserCookies}
+                  onChange={(event) => {
+                    inspection.current?.abort();
+                    setBusy(false);
+                    setReview(null);
+                    setDashReview(null);
+                    setUseBrowserCookies(event.target.checked);
+                  }}
+                  aria-label="Use browser cookies"
+                />
+              </span>
+            </div>
+            <div className="row">
+              <span className="row-label">Referrer</span>
+              <span className="muted">Omitted</span>
+            </div>
+            <div className="row">
+              <span className="row-label">User agent</span>
+              <span className="muted">Chrome default</span>
+            </div>
+            <div className="row">
+              <label htmlFor="add-hash">Expected SHA-256</label>
               <input
-                id="add-time"
-                name="schedule"
-                type="datetime-local"
-                required
-                defaultValue={soon()}
+                id="add-hash"
+                name="hash"
+                minLength={64}
+                maxLength={64}
+                pattern="[a-fA-F0-9]{64}"
+                placeholder="optional · 64-character checksum"
+                spellCheck={false}
               />
             </div>
+            <button
+              type="button"
+              className="ds-link browser-fallback"
+              onClick={() => void useBrowser()}
+              disabled={busy || kind !== 'file'}
+            >
+              <ExternalLink size={16} /> Use browser
+            </button>
+          </div>
+          <div
+            id="add-panel-schedule"
+            role="tabpanel"
+            aria-labelledby="add-tab-schedule"
+            data-panel="schedule"
+            hidden={tab !== 'schedule'}
+            className="panel"
+          >
+            <div className="row">
+              <label htmlFor="add-queue">Download queue</label>
+              <Select id="add-queue" name="queueId" defaultValue="default">
+                <option value="default">Default queue</option>
+                {snapshot.settings.queues.map((queue) => (
+                  <option key={queue.id} value={queue.id}>
+                    {queue.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="row">
+              <label htmlFor="add-priority">Priority</label>
+              <Select id="add-priority" name="priority" defaultValue="0">
+                <option value="2">High</option>
+                <option value="0">Normal</option>
+                <option value="-2">Low</option>
+              </Select>
+            </div>
+            <div className="checks">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={scheduled}
+                  onChange={(event) => setScheduled(event.target.checked)}
+                />
+                Schedule download
+              </label>
+            </div>
+            {scheduled && (
+              <div className="row">
+                <label htmlFor="add-time">Start time</label>
+                <DateTimePicker
+                  id="add-time"
+                  name="schedule"
+                  defaultValue={soon()}
+                  aria-label="Start time"
+                />
+              </div>
+            )}
+          </div>
+          {error && (
+            <p role="alert" className="error-message">
+              {error}
+            </p>
           )}
-        </div>
-        {error && (
-          <p role="alert" className="error-message">
-            {error}
-          </p>
-        )}
-        <footer className="modal-footer add-footer">
-          <label className="remember">
-            <Settings size={16} />
+          <label className="remember-row">
             <input
               type="checkbox"
               checked={remember}
@@ -966,16 +1038,30 @@ export function AddDownload({
             />
             Remember my settings for this site
           </label>
+        </Wrap>
+        <footer className="modal-footer add-footer">
           <button
             type="button"
-            className="button secondary"
+            className="ds-btn is-ghost"
             onClick={embedded ? embedded.onCancel : onClose}
           >
             Cancel
           </button>
-          <button className="button primary" disabled={busy}>
+          <button
+            type="button"
+            className="ds-btn is-outline"
+            disabled={busy}
+            title="Add to the list without starting"
+            onClick={() => {
+              addOnly.current = true;
+              formRef.current?.requestSubmit();
+            }}
+          >
+            Add paused
+          </button>
+          <button className="ds-btn is-primary" disabled={busy}>
             <ArrowDownToLine size={16} />
-            {busy ? 'Working…' : 'Start Download'}
+            {busy ? 'Working…' : 'Start download'}
           </button>
         </footer>
       </form>

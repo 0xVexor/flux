@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { FolderDown, TriangleAlert, X } from 'lucide-react';
 import type { ManagerAPI } from '../../application/contracts';
 import type { Snapshot } from '../../domain/model';
-import { folderSegments } from '../../shared/files';
 
 /** Main-page status for automatic saving, next to the capture status. */
 export function SaveSetup({
@@ -18,46 +17,73 @@ export function SaveSetup({
 }) {
   const settings = snapshot.settings;
   const [hidden, setHidden] = useState(false);
-  const inFolder = settings.saveLocation === 'folder' && !!snapshot.destination;
-  const base = inFolder
-    ? snapshot.destination!.name
-    : ['Downloads', ...folderSegments(settings.downloadsSubfolder ?? '')].join('/');
+  const base = snapshot.destination?.name ?? '';
   const target = settings.saveByCategory ? `${base}/<category>` : base;
-  // The browser's own "ask where to save" dialog can only be turned off by the user.
-  const blocked = settings.autoSave && !inFolder && settings.saveDialogDetected;
+  // Flux writes files itself; without a chosen folder, finished downloads wait for one.
+  const blocked = settings.autoSave && !snapshot.destination;
+  const needsAccess =
+    settings.autoSave && !!snapshot.destination && snapshot.destination.authorized === false;
+  if (needsAccess)
+    return (
+      <section className="ds-alert is-warning is-spaced" aria-label="Automatic saving">
+        <TriangleAlert size={16} aria-hidden="true" />
+        <div className="ds-alert-body">
+          <strong>Allow Flux to write to {snapshot.destination!.name}</strong>
+          <p>
+            Chrome asks again for folder access after the browser restarts. Allow it once and
+            waiting files are saved automatically.
+          </p>
+        </div>
+        <div className="ds-alert-actions">
+          <button
+            className="ds-btn is-primary is-small"
+            onClick={() => run(() => manager.restoreFolderAccess())}
+          >
+            Allow folder access
+          </button>
+          <button
+            className="ds-btn is-outline is-small"
+            onClick={() => run(() => manager.chooseDownloadFolder())}
+          >
+            Choose another folder
+          </button>
+        </div>
+      </section>
+    );
   if (!settings.autoSave)
     return (
-      <section className="capture-setup" aria-label="Automatic saving">
-        <FolderDown size={23} />
-        <div>
+      <section className="ds-alert is-spaced" aria-label="Automatic saving">
+        <FolderDown size={16} aria-hidden="true" />
+        <div className="ds-alert-body">
           <strong>Automatic saving is off</strong>
           <p>Finished downloads wait until you press Save file.</p>
         </div>
-        <button className="button primary" onClick={() => run(() => manager.setAutoSave(true))}>
-          Turn on automatic saving
-        </button>
+        <div className="ds-alert-actions">
+          <button
+            className="ds-btn is-primary is-small"
+            onClick={() => run(() => manager.setAutoSave(true))}
+          >
+            Turn on automatic saving
+          </button>
+        </div>
       </section>
     );
   if (blocked)
     return (
-      <section className="capture-setup warning" aria-label="Automatic saving">
-        <TriangleAlert size={23} />
-        <div>
-          <strong>Your browser asks where to save each file</strong>
+      <section className="ds-alert is-warning is-spaced" aria-label="Automatic saving">
+        <TriangleAlert size={16} aria-hidden="true" />
+        <div className="ds-alert-body">
+          <strong>Choose where Flux saves your files</strong>
           <p>
-            Turn off <b>Ask where to save each file before downloading</b> in the browser’s download
-            settings, or let Flux write into a folder you choose. Then files save on their own.
+            Flux writes finished downloads into a folder you pick, without using Chrome’s
+            downloader. Until you choose one, finished files wait here, verified and safe. Chrome
+            does not accept Downloads, Documents, Desktop or your home folder itself, so create a
+            new folder first (for example <b>Downloads/Flux</b>) and select that.
           </p>
         </div>
-        <div className="toolbar">
+        <div className="ds-alert-actions">
           <button
-            className="button primary"
-            onClick={() => run(() => chrome.tabs.create({ url: 'chrome://settings/downloads' }))}
-          >
-            Open download settings
-          </button>
-          <button
-            className="button secondary"
+            className="ds-btn is-primary is-small"
             onClick={() => run(() => manager.chooseDownloadFolder())}
           >
             Choose a folder
@@ -67,46 +93,26 @@ export function SaveSetup({
     );
   if (hidden) return null;
   return (
-    <section className="capture-setup" aria-label="Automatic saving">
-      <FolderDown size={23} />
-      <div>
+    <section className="ds-alert is-spaced" aria-label="Automatic saving">
+      <FolderDown size={16} aria-hidden="true" />
+      <div className="ds-alert-body">
         <strong>Automatic saving is on</strong>
         <p>
           Finished downloads go to <code>{target}</code> automatically.
         </p>
-        {!inFolder && (
-          <details className="banner-details">
-            <summary>About browser downloads</summary>
-            <p>
-              Files saved by Chrome also appear in its download list. Choose a folder to keep them
-              out of that list. Chrome does not allow Downloads itself, so choose a subfolder such
-              as <code>Downloads/Flux</code>.
-            </p>
-          </details>
-        )}
       </div>
-      <span className="banner-art folder-art" aria-hidden="true">
-        <FolderDown size={34} strokeWidth={1.4} />
-      </span>
-      {inFolder ? (
-        <button className="button secondary banner-action" onClick={onSettings}>
-          <FolderDown size={16} /> Change folders
+      <div className="ds-alert-actions">
+        <button className="ds-btn is-outline is-small" onClick={onSettings}>
+          <FolderDown size={16} aria-hidden="true" /> Change folders
         </button>
-      ) : (
         <button
-          className="button secondary banner-action"
-          onClick={() => run(() => manager.chooseDownloadFolder())}
+          className="ds-icon-btn is-small"
+          aria-label="Dismiss banner"
+          onClick={() => setHidden(true)}
         >
-          <FolderDown size={16} /> Choose a folder
+          <X size={16} />
         </button>
-      )}
-      <button
-        className="icon-button banner-close"
-        aria-label="Dismiss banner"
-        onClick={() => setHidden(true)}
-      >
-        <X size={18} />
-      </button>
+      </div>
     </section>
   );
 }

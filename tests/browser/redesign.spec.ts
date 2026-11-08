@@ -169,12 +169,12 @@ test('all redesigned flows in both themes, with real settings persistence and pa
     popup.on('pageerror', (error) => errors.push(error.message));
     await popup.setViewportSize({ width: 400, height: 600 });
     await popup.goto(`chrome-extension://${id}/popup.html`);
-    await expect(popup.getByRole('heading', { name: 'Ready for your next file' })).toBeVisible();
+    await expect(popup.getByText('No active downloads')).toBeVisible();
     await shot(`${theme}-popup`, popup);
     await fits(popup);
-    expect(
-      await popup.locator('.popup-shell').evaluate((element) => element.scrollHeight <= 600),
-    ).toBe(true);
+    expect(await popup.locator('.pm').evaluate((element) => element.scrollHeight <= 600)).toBe(
+      true,
+    );
     await popup.close();
   }
   // Exercise the actual Add action without starting a network transfer.

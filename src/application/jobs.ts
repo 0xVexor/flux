@@ -4,7 +4,7 @@ import {
   type NewDownload,
   type Settings,
 } from '../domain/model';
-import { filenameFromHeaders, categoryOf, sanitizeFilename } from '../shared/files';
+import { filenameFromHeaders, categoryOf, folderSegments, sanitizeFilename } from '../shared/files';
 import { validateUrl } from '../shared/security';
 export const downloadIdentity = (url: string, audioUrl?: string, dash?: NewDownload['dash']) =>
   JSON.stringify([url, audioUrl ?? null, ...(dash ? [dash.videoId, dash.audioId ?? null] : [])]);
@@ -80,6 +80,11 @@ export function createJob(
   if (input.media && !/\.(mp4|m4a)$/i.test(filename))
     filename = sanitizeFilename(filename.replace(/\.(?:m3u8?|mpd)$/i, '') + '.mp4');
   const now = Date.now();
+  // Each part is sanitized, and ".." and empty parts are dropped, so it stays inside the folder.
+  const saveSubfolder =
+    typeof input.saveSubfolder === 'string'
+      ? folderSegments(input.saveSubfolder).slice(0, 4).join('/')
+      : '';
   return {
     id: crypto.randomUUID(),
     useBrowserCookies: input.useBrowserCookies === true,
@@ -99,6 +104,7 @@ export function createJob(
     url,
     filename,
     category: input.category ?? categoryOf(filename),
+    ...(saveSubfolder ? { saveSubfolder } : {}),
     state: input.startPaused ? 'PAUSED' : 'QUEUED',
     createdAt: now,
     updatedAt: now,

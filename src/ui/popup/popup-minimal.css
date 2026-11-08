@@ -1,0 +1,234 @@
+/* Toolbar popup. Sizes, corners, buttons, dots and bars come from the spec in ds.css. */
+body:has(.pm) {
+  width: 360px;
+  min-width: 360px;
+  min-height: 0;
+  margin: 0;
+  background: var(--bg);
+  background-image: none;
+}
+.pm {
+  width: 360px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+}
+.pm * {
+  box-sizing: border-box;
+}
+
+/* Header: the name, then two icon buttons. */
+.pm .pm-head {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-1);
+  padding: var(--ds-space-3) var(--ds-space-3) var(--ds-space-3) var(--ds-space-4);
+}
+.pm .pm-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  margin: 0 auto 0 0;
+  color: var(--text);
+  text-decoration: none;
+}
+.pm .pm-bolt {
+  color: var(--accent);
+}
+.pm .pm-word {
+  display: inline-flex;
+  align-items: baseline;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.8px;
+}
+.pm .pm-period {
+  width: 6px;
+  height: 6px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Speed: a card. */
+.pm .pm-speed {
+  position: relative;
+  overflow: hidden;
+  margin: 0 var(--ds-space-4);
+  padding: var(--ds-space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-xl);
+  background: var(--surface);
+  box-shadow: var(--ds-shadow-xs);
+}
+.pm .pm-speed.is-idle {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  padding: var(--ds-space-3) var(--ds-space-4);
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+.pm .pm-spark {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 58%;
+  height: 76%;
+  color: var(--accent);
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 45%);
+  mask-image: linear-gradient(to right, transparent, #000 45%);
+}
+.pm .pm-eyebrow {
+  position: relative;
+  display: block;
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+.pm .pm-speed-line {
+  position: relative;
+  margin-top: var(--ds-space-1);
+}
+.pm .pm-speed-value {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.8px;
+  color: var(--text);
+}
+.pm .pm-speed-unit {
+  margin-left: 3px;
+  font-size: var(--ds-text);
+  color: var(--muted);
+}
+.pm .pm-speed p {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  margin: var(--ds-space-1) 0 0;
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+
+/* List: five rows are visible, the rest scrolls. */
+.pm .pm-list {
+  padding: var(--ds-space-4) var(--ds-space-4) 0;
+}
+.pm .pm-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 var(--ds-space-2);
+  font-size: var(--ds-text);
+  font-weight: 500;
+  line-height: var(--ds-text-lh);
+  color: var(--text);
+}
+.pm .pm-scroll {
+  max-height: 320px;
+  margin: 0 calc(var(--ds-space-4) * -1);
+  padding: 0 var(--ds-space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.pm .pm-scroll::-webkit-scrollbar {
+  display: none;
+}
+.pm .pm-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-3);
+  min-height: 64px;
+  padding: var(--ds-space-3) 0;
+  border-top: 1px solid var(--border);
+}
+.pm .pm-ficon {
+  flex: none;
+  color: var(--muted);
+}
+.pm .pm-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-1);
+}
+.pm .pm-main strong {
+  unicode-bidi: plaintext;
+  text-align: left;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.pm .pm-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  min-width: 0;
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+.pm .pm-meta-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pm .pm-bar {
+  margin-top: var(--ds-space-1);
+}
+
+/* Empty state. */
+.pm .pm-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ds-space-1);
+  padding: var(--ds-space-6);
+  text-align: center;
+  color: var(--muted);
+}
+.pm .pm-empty p {
+  margin: var(--ds-space-1) 0 0;
+  font-size: var(--ds-text);
+  font-weight: 500;
+  color: var(--text);
+}
+.pm .pm-empty small {
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+}
+
+/* Footer: capture status on the left, the one filled button on the right. */
+.pm .pm-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+  margin-top: var(--ds-space-3);
+  padding: var(--ds-space-4);
+  border-top: 1px solid var(--border);
+}
+.pm .pm-status {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+.pm .pm-status .ds-link {
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+}

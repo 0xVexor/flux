@@ -1,0 +1,432 @@
+/*
+ * Add download, in the manager window and in the toolbar popup, on the spec in ds.css.
+ * This file loads after every older layer, so these rules are the last word. It uses the
+ * ds tokens instead of numbers of its own.
+ */
+
+/* ---- Layout: fields are 16 apart, a label sits 8 above its control. ---- */
+.add-form {
+  gap: var(--ds-space-4);
+}
+.add-form .panel {
+  gap: var(--ds-space-4);
+  min-height: 0;
+}
+.add-form .row,
+.add-form .panel .row,
+.embedded-dialog .panel .row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--ds-space-2);
+}
+.add-form .row > label,
+.add-form .row > .row-label,
+.add-form .panel .row > label,
+.add-form .panel .row > .row-label {
+  margin: 0;
+  font-size: var(--ds-text);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text);
+}
+.add-form .row:has(> .switch-static) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+  min-height: var(--ds-h-sm);
+}
+.add-form .row-pair,
+.add-form .speed-row {
+  align-items: start;
+  gap: var(--ds-space-2);
+}
+.add-form .row-pair.is-folder {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.add-form .speed-row {
+  grid-template-columns: 112px 96px auto;
+}
+.add-form .speed-row > span,
+.add-form .connection-help,
+.add-form .muted.small {
+  font-size: var(--ds-small);
+  font-weight: 400;
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+.add-form .speed-row > span {
+  line-height: var(--ds-h);
+}
+.add-form .add-essentials {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4);
+}
+.add-form .add-host {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: calc(var(--ds-space-2) * -1) 0 0;
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+
+/* ---- Text fields. ---- */
+.add-form input:not([type='checkbox']):not([type='radio']):not([type='hidden']),
+.add-form textarea {
+  height: var(--ds-h);
+  padding: 0 var(--ds-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius);
+  background-color: transparent;
+  box-shadow: var(--ds-shadow-xs);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+}
+.add-form textarea {
+  height: auto;
+  padding: var(--ds-space-2) var(--ds-space-3);
+}
+.add-form input::placeholder,
+.add-form textarea::placeholder {
+  color: var(--muted);
+}
+.add-form input:not([type='checkbox']):focus,
+.add-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ds-ring);
+}
+.add-form input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.add-form .add-url .input-icon input {
+  padding-right: 44px;
+}
+.add-form .url-clear {
+  top: 2px;
+  right: 2px;
+}
+.add-form .add-url-actions {
+  justify-content: flex-start;
+  margin-top: var(--ds-space-2);
+}
+.add-form .fake-input {
+  height: var(--ds-h);
+  padding: 0 var(--ds-space-3);
+  gap: var(--ds-space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius);
+  background: transparent;
+  box-shadow: var(--ds-shadow-xs);
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+}
+.add-form .row > input[aria-label='New folder name'] {
+  margin-top: 0;
+}
+.add-form input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.add-form input[type='number']::-webkit-inner-spin-button,
+.add-form input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ---- Checkbox: 16 px, 4 px corners, a drawn check. ---- */
+.add-form .checks {
+  gap: var(--ds-space-3);
+  padding: 0;
+}
+.add-form .check,
+.add-form .remember-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  font-size: var(--ds-text);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text);
+  cursor: pointer;
+}
+.add-form input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--ds-radius-sm);
+  background: transparent;
+  box-shadow: var(--ds-shadow-xs);
+}
+.add-form input[type='checkbox']:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.add-form input[type='checkbox']:checked::after {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  transform: none;
+  background: var(--accent-ink);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+    center / 14px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+    center / 14px no-repeat;
+}
+.add-form .check-line {
+  align-items: flex-start;
+  gap: var(--ds-space-3);
+}
+.add-form .check-line > .check {
+  min-height: var(--ds-h-sm);
+}
+.add-form .check-line .ds-select {
+  width: 88px;
+  flex: none;
+  margin-left: auto;
+}
+.add-form .speed-row .ds-select {
+  width: 96px;
+}
+.add-form .speed-row .ds-select.is-small .ds-select-trigger {
+  height: var(--ds-h);
+}
+
+/* ---- Switch: 32 by 18, a 16 px thumb that moves 14 px. ---- */
+.add-form .switch-static input[type='checkbox'] {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--border-strong);
+  box-shadow: var(--ds-shadow-xs);
+}
+.add-form .switch-static input[type='checkbox']::after {
+  display: none;
+}
+.add-form .switch-static input[type='checkbox']::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: left 0.15s;
+}
+:root[data-theme='light'] .add-form .switch-static input[type='checkbox']::before {
+  background: var(--surface);
+}
+.add-form .switch-static input[type='checkbox']:checked {
+  background: var(--accent);
+}
+.add-form .switch-static input[type='checkbox']:checked::before {
+  left: 14px;
+  background: var(--accent-ink);
+}
+
+/* ---- Tabs: a segmented control. ---- */
+.add-form .tabs {
+  display: flex;
+  gap: 0;
+  height: var(--ds-h);
+  padding: 3px;
+  border: 0;
+  border-radius: var(--ds-radius-lg);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+.add-form .tabs button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: var(--ds-space-1) var(--ds-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--ds-text);
+  font-weight: 500;
+  line-height: var(--ds-text-lh);
+  white-space: nowrap;
+}
+.add-form .tabs button.selected {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: var(--ds-shadow-xs);
+  color: var(--text);
+  font-weight: 500;
+}
+.add-form .tabs button svg {
+  flex: none;
+}
+
+/* ---- "More options" (popup): folded, so the window never needs scrolling just to start. ---- */
+.add-form .more > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--ds-h-sm);
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--ds-text);
+  font-weight: 500;
+  line-height: var(--ds-text-lh);
+  color: var(--muted);
+}
+.add-form .more > summary::-webkit-details-marker {
+  display: none;
+}
+.add-form .more > summary:hover {
+  color: var(--text);
+}
+.add-form .more > summary:focus-visible {
+  outline: none;
+  border-radius: var(--ds-radius);
+  box-shadow: var(--ds-ring);
+}
+.add-form .more > summary svg {
+  transition: transform 0.15s;
+}
+.add-form .more[open] > summary svg {
+  transform: rotate(90deg);
+}
+.add-form .more-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4);
+  padding-top: var(--ds-space-3);
+}
+
+/* ---- Footer: buttons 8 apart, at the end. ---- */
+.add-form .add-footer {
+  justify-content: flex-end;
+  gap: var(--ds-space-2);
+  margin: 0 -26px;
+  padding: var(--ds-space-4) 26px;
+  border-top: 1px solid var(--border);
+}
+.add-form .add-footer .ds-btn {
+  min-width: 0;
+}
+
+/* ---- Several downloads at once: pick the files, then where they go. ---- */
+.add-form .batch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--ds-text);
+  font-weight: 500;
+  line-height: var(--ds-text-lh);
+  color: var(--text);
+}
+.add-form .batch-files {
+  max-height: 232px;
+  margin: 0 calc(var(--ds-space-2) * -1);
+  padding: 0 var(--ds-space-2);
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: none;
+}
+.add-form .batch-files::-webkit-scrollbar {
+  display: none;
+}
+.add-form .batch-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-3);
+  min-height: 48px;
+  padding: 6px var(--ds-space-2);
+  border-radius: var(--ds-radius);
+  font-size: var(--ds-text);
+  font-weight: 400;
+  line-height: var(--ds-text-lh);
+  color: var(--text);
+  cursor: pointer;
+}
+.add-form .batch-row:hover {
+  background: var(--hover);
+}
+.add-form .batch-icon {
+  flex: none;
+  color: var(--muted);
+}
+.add-form .batch-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.add-form .batch-name strong {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.add-form .batch-name small {
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+
+/* ---- Toolbar popup: 440 px wide, 24 px padding, the buttons pinned to the bottom edge. ---- */
+html.capture-mode body {
+  display: flex;
+  flex-direction: column;
+  width: 440px;
+  min-width: 440px;
+}
+.embedded-dialog {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 440px;
+  max-height: 600px;
+}
+.embedded-dialog .modal-header {
+  padding: var(--ds-space-6) var(--ds-space-6) 0;
+  border-bottom: 0;
+}
+.embedded-dialog .modal-header h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  margin: 0;
+  font-size: var(--ds-title);
+  font-weight: 600;
+  line-height: 1;
+}
+.embedded-dialog .modal-header h2 svg {
+  color: var(--accent);
+}
+.embedded-dialog .add-form {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--ds-space-4) var(--ds-space-6) 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.embedded-dialog .add-form::-webkit-scrollbar {
+  display: none;
+}
+.embedded-dialog .panel {
+  min-height: 0;
+}
+.embedded-dialog .add-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: auto calc(var(--ds-space-6) * -1) 0;
+  padding: var(--ds-space-4) var(--ds-space-6);
+  background: var(--surface);
+}

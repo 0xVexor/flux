@@ -24,6 +24,7 @@ const allowed = new Set([
   'activeTab',
   'scripting',
   'webRequest',
+  'offscreen',
 ]);
 if (
   manifest.permissions.length !== allowed.size ||
@@ -68,6 +69,7 @@ for (const file of [
   manifest.background.service_worker,
   manifest.action.default_popup,
   'manager.html',
+  'offscreen.html',
   'THIRD_PARTY_NOTICES.txt',
   ...Object.values(manifest.icons),
 ])
