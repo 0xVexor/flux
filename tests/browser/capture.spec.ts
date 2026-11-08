@@ -3,6 +3,7 @@ import { cp, mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { chooseByText } from './select';
 import { startFixture, fixtureHash } from '../fixtures/server';
 import type { Snapshot, DownloadJob } from '../../src/domain/model';
 let fixture: Awaited<ReturnType<typeof startFixture>>,
@@ -73,7 +74,7 @@ test.beforeAll(async () => {
   manager = await context.newPage();
   await manager.goto(`chrome-extension://${id}/manager.html`);
   await expect(manager.getByRole('heading', { name: 'All downloads.' })).toBeVisible();
-  // These tests cover automatic starts; the Add Download window has its own test below.
+  // These tests cover automatic starts; the Add download window has its own test below.
   await manager.getByRole('button', { name: 'Settings', exact: true }).click();
   await manager.locator('input[name="confirmCapture"]').uncheck();
   await manager.getByRole('button', { name: 'Save preferences', exact: true }).click();
@@ -135,7 +136,7 @@ test('captured redirect and cross-host redirect download successfully while priv
   await manager.getByLabel('Download URL').fill(redirected);
   await manager
     .getByRole('dialog')
-    .getByRole('button', { name: 'Start Download', exact: true })
+    .getByRole('button', { name: 'Start download', exact: true })
     .click();
   await waitReady(redirected, 1048576);
   const blocked = `${base}/redirect-private`;
@@ -143,7 +144,7 @@ test('captured redirect and cross-host redirect download successfully while priv
   await manager.getByLabel('Download URL').fill(blocked);
   await manager
     .getByRole('dialog')
-    .getByRole('button', { name: 'Start Download', exact: true })
+    .getByRole('button', { name: 'Start download', exact: true })
     .click();
   await expect
     .poll(async () => (await jobs()).find((job) => job.url === blocked)?.state)
@@ -225,7 +226,7 @@ test('the cookie choice is real and redirected CDN requests omit an unrelated se
   await manager.getByLabel('Download URL').fill(direct);
   await manager.getByRole('tab', { name: 'Advanced', exact: true }).click();
   await manager.getByLabel('Use browser cookies', { exact: true }).uncheck();
-  await manager.getByRole('button', { name: 'Start Download', exact: true }).click();
+  await manager.getByRole('button', { name: 'Start download', exact: true }).click();
   await expect
     .poll(async () => (await jobs()).find((job) => job.url === direct)?.state)
     .toBe('FAILED');
@@ -236,7 +237,7 @@ test('the cookie choice is real and redirected CDN requests omit an unrelated se
   const redirected = `${base}/redirect-to?to=${encodeURIComponent(target)}`;
   await manager.getByRole('button', { name: 'Add download', exact: true }).click();
   await manager.getByLabel('Download URL').fill(redirected);
-  await manager.getByRole('button', { name: 'Start Download', exact: true }).click();
+  await manager.getByRole('button', { name: 'Start download', exact: true }).click();
   await waitReady(redirected, 131072);
   const requests = fixture.stats.cookieRequests.filter(
     (entry) => entry.path === '/session-isolation.zip',
@@ -397,7 +398,7 @@ test('named queues, batch link review and expired address refresh control real e
   await manager
     .getByLabel('Download links', { exact: true })
     .fill(inputs.map((item) => `${item.url}\t${item.filename}`).join('\n'));
-  await manager.getByLabel('Download queue').selectOption({ label: 'Sequential files' });
+  await chooseByText(manager, 'Download queue', 'Sequential files');
   await manager.getByRole('button', { name: 'Add selected downloads', exact: true }).click();
   await expect(manager.getByRole('status')).toHaveText('3 added; 0 already queued.');
   await manager.getByRole('button', { name: 'Close', exact: true }).click();
@@ -417,7 +418,7 @@ test('named queues, batch link review and expired address refresh control real e
   await manager.getByLabel('File name optional').fill('refreshed.bin');
   await manager
     .getByRole('dialog')
-    .getByRole('button', { name: 'Start Download', exact: true })
+    .getByRole('button', { name: 'Start download', exact: true })
     .click();
   await expect
     .poll(async () => (await jobs()).find((job) => job.url === expired)?.state)
@@ -607,7 +608,7 @@ test('a chosen destination automatically exports verified files, avoids existing
     await manager.getByLabel('File name optional').fill('same-name.bin');
     await manager
       .getByRole('dialog')
-      .getByRole('button', { name: 'Start Download', exact: true })
+      .getByRole('button', { name: 'Start download', exact: true })
       .click();
     await expect
       .poll(async () => (await jobs()).find((job) => job.url === url)?.state, { timeout: 30000 })

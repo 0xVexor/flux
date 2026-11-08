@@ -2,6 +2,7 @@ import { test, expect, chromium, type BrowserContext, type Page } from '@playwri
 import { cp, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { chooseByText } from './select';
 import { startFixture, fixtureHash } from '../fixtures/server';
 import type { Snapshot } from '../../src/domain/model';
 let context: BrowserContext, page: Page, root: string, id: string, base: string;
@@ -67,11 +68,11 @@ async function add(url: string, filename: string, queue?: string) {
   await page.getByLabel('File name optional').fill(filename);
   if (queue) {
     await page.getByRole('tab', { name: 'Schedule' }).click();
-    await page.getByLabel('Download queue').selectOption({ label: queue });
+    await chooseByText(page, 'Download queue', queue);
   }
   await page
     .getByRole('dialog')
-    .getByRole('button', { name: 'Start Download', exact: true })
+    .getByRole('button', { name: 'Start download', exact: true })
     .click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 }

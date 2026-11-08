@@ -3,6 +3,7 @@ import { cp, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { choose } from './select';
 import { startFixture } from '../fixtures/server';
 import { encodedSampleProof } from '../fixtures/sample-proof';
 import type { Snapshot } from '../../src/domain/model';
@@ -55,7 +56,7 @@ async function add(name: string, path: string, master = false, audioUrl?: string
   await page.getByLabel('Download URL').fill(`${base}/hls/${path}`);
   await page.getByLabel('File name optional').fill(name);
   await page.getByRole('tab', { name: 'Advanced' }).click();
-  await page.getByLabel('Download type').selectOption(dash ? 'dash' : 'hls');
+  await choose(page, 'Download type', dash ? 'dash' : 'hls');
   await page
     .getByRole('button', {
       name: dash ? 'Review DASH manifest' : 'Review HLS playlist',
@@ -63,18 +64,18 @@ async function add(name: string, path: string, master = false, audioUrl?: string
     })
     .click();
   if (dash && audioUrl) {
-    await page.getByLabel('DASH audio language').selectOption(audioUrl);
+    await choose(page, 'DASH audio language', audioUrl);
     await page.getByRole('button', { name: 'Review selected DASH tracks', exact: true }).click();
   }
   if (master && !dash) {
     await expect(page.getByLabel('Video quality')).toBeVisible();
-    if (audioUrl) await page.getByLabel('Audio / language').selectOption(audioUrl);
+    if (audioUrl) await choose(page, 'Audio / language', audioUrl);
     await page.getByRole('button', { name: 'Review selected quality', exact: true }).click();
   }
   await expect(page.getByRole('status').filter({ hasText: 'Output: MP4' })).toBeVisible();
   await page
     .getByRole('dialog')
-    .getByRole('button', { name: 'Start Download', exact: true })
+    .getByRole('button', { name: 'Start download', exact: true })
     .click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   return page

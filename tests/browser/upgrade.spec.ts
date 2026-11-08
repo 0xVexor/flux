@@ -83,7 +83,7 @@ test('0.10 upgrade preserves settings, queues and verified partial data in the s
         `${fixture.url.replace('127.0.0.1', 'downloads.example.com')}/slow?size=${size}&delay=20`,
       );
     await page!.getByLabel('File name optional').fill(filename);
-    await page!.getByRole('button', { name: 'Start Download', exact: true }).click();
+    await page!.getByRole('button', { name: 'Start download', exact: true }).click();
     await expect
       .poll(async () => (await snapshot()).jobs[0]?.segments.length ?? 0)
       .toBeGreaterThan(0);

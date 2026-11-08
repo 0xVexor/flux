@@ -58,7 +58,7 @@ async function add(url: string, name: string) {
   await page.getByLabel('File name optional').fill(name);
   await page
     .getByRole('dialog')
-    .getByRole('button', { name: 'Start Download', exact: true })
+    .getByRole('button', { name: 'Start download', exact: true })
     .click();
   return page
     .locator('.download-card')

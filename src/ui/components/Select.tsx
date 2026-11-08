@@ -268,6 +268,7 @@ export function Select({
                 aria-selected={option.value === selected?.value}
                 aria-disabled={option.disabled || undefined}
                 data-active={mine === active}
+                data-value={option.value}
                 onPointerDown={(event) => {
                   event.preventDefault();
                   choose(option);

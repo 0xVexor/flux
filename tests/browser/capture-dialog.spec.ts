@@ -81,7 +81,7 @@ test.afterAll(async () => {
   await fixture?.close();
   if (root) await rm(root, { recursive: true, force: true });
 });
-test('a captured link opens the Add Download window and starts only after Start Download', async () => {
+test('a captured link opens the Add download window and starts only after Start download', async () => {
   await manager.getByRole('button', { name: 'Enable automatic downloads', exact: true }).click();
   await manager.evaluate(() => chrome.runtime.sendMessage({ type: 'configure-offers' }));
   const url = new URL((await site.locator('#normal').getAttribute('href'))!, base).href;
@@ -97,10 +97,10 @@ test('a captured link opens the Add Download window and starts only after Start 
       { timeout: 20000 },
     )
     .toBe(1);
-  await expect(popup.getByRole('heading', { name: 'Add Download' })).toBeVisible();
+  await expect(popup.getByRole('heading', { name: 'Add download' })).toBeVisible();
   await expect(popup.getByLabel('Download URL')).toHaveValue(url);
   await popup.screenshot({ path: 'test-results/screenshots/capture-dialog.png' });
-  await popup.getByRole('button', { name: 'Start Download', exact: true }).click();
+  await popup.getByRole('button', { name: 'Start download', exact: true }).click();
   await waitReady(url, 1048576);
   await popup.close();
 });

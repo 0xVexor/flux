@@ -2,6 +2,7 @@ import { test, expect, chromium, type BrowserContext, type Page } from '@playwri
 import { cp, mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { choose } from './select';
 import { startFixture } from '../fixtures/server';
 
 let context: BrowserContext;
@@ -169,7 +170,7 @@ test('all redesigned flows in both themes, with real settings persistence and pa
     popup.on('pageerror', (error) => errors.push(error.message));
     await popup.setViewportSize({ width: 400, height: 600 });
     await popup.goto(`chrome-extension://${id}/popup.html`);
-    await expect(popup.getByText('No active downloads')).toBeVisible();
+    await expect(popup.getByText('No downloads yet')).toBeVisible();
     await shot(`${theme}-popup`, popup);
     await fits(popup);
     expect(await popup.locator('.pm').evaluate((element) => element.scrollHeight <= 600)).toBe(
@@ -249,7 +250,7 @@ test('batch import, selected downloads, queue files, and a real active transfer 
       await page.getByRole('button', { name: 'Add download', exact: true }).click();
       await page.getByLabel('Download URL').fill(url);
       await page.getByLabel('File name optional').fill('active-transfer.zip');
-      await page.getByRole('button', { name: 'Start Download', exact: true }).click();
+      await page.getByRole('button', { name: 'Start download', exact: true }).click();
     }
     await expect(
       page.getByRole('button', { name: 'Pause active-transfer.zip', exact: true }),
@@ -278,7 +279,7 @@ test('batch import, selected downloads, queue files, and a real active transfer 
   expect(errors).toEqual([]);
 });
 
-test('captured links use the redesigned queue chooser and embedded Add Download', async () => {
+test('captured links use the redesigned queue chooser and embedded Add download', async () => {
   await settings();
   await page.getByLabel('Automatically capture downloads').check();
   await page.locator('input[name="confirmCapture"]').uncheck();
@@ -329,7 +330,7 @@ test('captured links use the redesigned queue chooser and embedded Add Download'
     await fits(popup);
   }
   await popup.getByRole('tab', { name: 'General', exact: true }).click();
-  await popup.getByRole('button', { name: 'Start Download', exact: true }).click();
+  await popup.getByRole('button', { name: 'Start download', exact: true }).click();
   await popup.close();
   await site.close();
 });
@@ -366,7 +367,7 @@ test('sidebar fits short windows and download details separates overview from ed
     await fits();
     await dialog.getByRole('tab', { name: 'Settings', exact: true }).click();
     await dialog.locator('input[name="speedLimit"]').fill('64');
-    await dialog.locator('select[name="priority"]').selectOption('2');
+    await choose(dialog, 'Priority', '2');
     await dialog.getByRole('tab', { name: 'Settings', exact: true }).focus();
     await page.keyboard.press('ArrowRight');
     await expect(dialog.getByRole('tabpanel', { name: 'Connections', exact: true })).toBeVisible();

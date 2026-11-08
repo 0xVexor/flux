@@ -71,7 +71,7 @@ test('user-provided live URL transfers through Flux and matches an independent b
     await page.getByLabel('File name optional').fill('live-verified.zip');
     await page
       .getByRole('dialog')
-      .getByRole('button', { name: 'Start Download', exact: true })
+      .getByRole('button', { name: 'Start download', exact: true })
       .click();
     const getJob = async () => {
       const s = await page.evaluate(
