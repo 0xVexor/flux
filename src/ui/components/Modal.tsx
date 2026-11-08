@@ -1,15 +1,17 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { X, Zap } from 'lucide-react';
+import { X } from 'lucide-react';
 export function Modal({
   title,
   onClose,
   children,
   wide = false,
+  description,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  description?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -33,11 +35,11 @@ export function Modal({
       aria-labelledby="modal-title"
     >
       <header className="modal-header">
-        <h2 id="modal-title">
-          <Zap size={20} aria-hidden="true" />
-          {title}
-        </h2>
-        <button className="icon-button" onClick={onClose} aria-label="Close dialog">
+        <div className="modal-heading">
+          <h2 id="modal-title">{title}</h2>
+          {description && <p>{description}</p>}
+        </div>
+        <button className="ds-icon-btn is-small" onClick={onClose} aria-label="Close dialog">
           <X size={19} />
         </button>
       </header>

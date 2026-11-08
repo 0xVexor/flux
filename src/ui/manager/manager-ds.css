@@ -1,0 +1,729 @@
+/*
+ * All downloads page on the shared design system (ds.css). It loads after every older layer and
+ * wins by scoping to `.main-content`. Colours come from tokens.css; every size, radius and gap
+ * comes from the --ds-* tokens. The page is an extension tab, so it fits the window: only the
+ * list of downloads scrolls, and the page scrolls only when the window is too short for the rest.
+ */
+.main-content.fit-page {
+  --topbar-h: calc(var(--ds-h) + var(--ds-space-4));
+  scrollbar-width: none;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--topbar-h));
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.main-content.fit-page > * {
+  flex: none;
+}
+.main-content.fit-page > .downloads-section {
+  flex: 1 1 auto;
+  min-height: 280px;
+}
+
+.main-content .page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-4);
+  margin: var(--ds-space-2) 0 var(--ds-space-4);
+}
+.main-content .page-heading h1 {
+  margin: 0;
+  font-size: var(--ds-title);
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.main-content .page-heading p {
+  margin: var(--ds-space-1) 0 0;
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  color: var(--muted);
+}
+
+/* Tools: one quiet row; it wraps instead of overflowing a narrow tab. */
+.main-content .workspace-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-2);
+  margin: 0 0 var(--ds-space-4);
+}
+
+/* Summary cards: the same four reports, on the card rules (hairline, no coloured tiles). */
+.main-content .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--ds-space-3);
+  margin: 0 0 var(--ds-space-4);
+}
+.main-content .stat-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--ds-space-1);
+  min-height: 0;
+  padding: var(--ds-space-4);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-xl);
+  background: var(--surface);
+  box-shadow: var(--ds-shadow-xs);
+  text-align: left;
+}
+.main-content .stat-card .stat-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-2);
+  margin: 0;
+}
+.main-content .stat-card .stat-label > span {
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  font-weight: 500;
+  color: var(--muted);
+}
+.main-content .stat-card .stat-label > svg {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+}
+.main-content .stat-card .stat-value,
+.main-content .stat-card .stat-value.accent-text {
+  margin: 0;
+  font-size: var(--ds-title);
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text) !important;
+}
+.main-content .stat-card .stat-value small {
+  margin-left: var(--ds-space-1);
+  font-size: var(--ds-small);
+  font-weight: 400;
+  color: var(--muted);
+}
+.main-content .stat-card .stat-foot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+.main-content .stat-card .stat-art {
+  top: auto;
+  right: var(--ds-space-4);
+  bottom: var(--ds-space-4);
+  opacity: 0.35;
+}
+.main-content .stat-card .stat-art.wave {
+  top: var(--ds-space-6);
+  bottom: auto;
+}
+.main-content .stat-card .stat-meter {
+  align-self: stretch;
+  margin-top: var(--ds-space-2);
+}
+
+/* Downloads block: heading, controls and bulk bar stay put; only the list scrolls. */
+.main-content .downloads-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-xl);
+  background: var(--surface);
+  overflow: hidden;
+}
+.main-content .downloads-section > * {
+  flex: none;
+}
+.main-content .downloads-section > .download-list {
+  flex: 1 1 auto;
+}
+.main-content .section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--ds-space-3);
+  margin: 0;
+  padding: var(--ds-space-4);
+}
+.main-content .downloads-title {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+}
+.main-content .section-heading h2 {
+  margin: 0;
+  font-size: var(--ds-title);
+  line-height: 1.25;
+  font-weight: 600;
+}
+.main-content .count-badge {
+  padding: 2px var(--ds-space-2);
+  border-radius: var(--ds-radius-lg);
+  background: var(--hover);
+  color: var(--muted);
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  font-weight: 500;
+}
+.main-content .toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-2);
+}
+
+/* Search and filters: one row that wraps. */
+.main-content .list-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-2);
+  margin: 0;
+  padding: 0 var(--ds-space-4) var(--ds-space-4);
+}
+.main-content .search-box {
+  display: flex;
+  flex: 1 1 220px;
+  align-items: center;
+  gap: var(--ds-space-2);
+  min-width: 0;
+  height: var(--ds-h);
+  padding: 0 var(--ds-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius);
+  background: transparent;
+  box-shadow: var(--ds-shadow-xs);
+  color: var(--muted);
+}
+.main-content .search-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--ds-ring);
+}
+.main-content .search-box input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font-size: var(--ds-text);
+}
+.main-content .search-box input:focus {
+  outline: 0;
+  box-shadow: none;
+}
+.main-content .filter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-2);
+}
+.main-content .filter-controls .ds-select {
+  width: auto;
+  min-width: 150px;
+}
+
+/* Bulk bar */
+.main-content .bulk-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-2);
+  margin: 0;
+  padding: var(--ds-space-2) var(--ds-space-4);
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--ds-text);
+}
+.main-content .bulk-toolbar .ds-select {
+  width: auto;
+  min-width: 160px;
+}
+
+/* Rows: a flat list divided by hairlines. This is the only part that scrolls. */
+.main-content .download-list {
+  display: block;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--border);
+  scrollbar-width: none;
+}
+.main-content .download-list::-webkit-scrollbar,
+.main-content.fit-page::-webkit-scrollbar {
+  display: none;
+}
+.main-content .download-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 150px auto;
+  align-items: center;
+  gap: var(--ds-space-3);
+  margin: 0;
+  padding: var(--ds-space-3) var(--ds-space-4);
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+.main-content .download-card:first-child {
+  border-top: 0;
+}
+.main-content .download-card:hover {
+  background: var(--hover);
+  transform: none;
+  box-shadow: none;
+}
+.main-content .file-icon {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-3);
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+}
+.main-content .file-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.main-content .file-icon .job-selection {
+  position: static;
+  order: -1;
+  margin: 0;
+  opacity: 1;
+}
+.main-content .download-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-1);
+  min-width: 0;
+}
+.main-content .download-name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-3);
+  min-width: 0;
+}
+.main-content .file-name {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  font-weight: 500;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  unicode-bidi: plaintext;
+}
+.main-content .file-name:hover {
+  text-decoration: underline;
+}
+
+/* Status: the shared dot and text, never a coloured box. */
+.main-content .status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--ds-space-2);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.main-content .status.failed {
+  color: var(--danger);
+}
+
+.main-content .file-meta,
+.main-content .download-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-1) var(--ds-space-2);
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+.main-content .download-bottom {
+  justify-content: space-between;
+}
+/* Progress follows the shared bar (ds-bar): same height, track and fill. */
+.main-content .progress {
+  height: var(--ds-bar);
+  margin: var(--ds-space-1) 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  overflow: hidden;
+}
+.main-content .progress > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.main-content .row-date {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-1);
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--text);
+  white-space: nowrap;
+}
+.main-content .row-date > span {
+  color: var(--muted);
+}
+.main-content .row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-1);
+}
+
+/* Empty state and footnote */
+.main-content .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ds-space-2);
+  padding: var(--ds-space-6) var(--ds-space-4);
+  text-align: center;
+  border: 0;
+  background: transparent;
+}
+.main-content .empty-state .empty-icon {
+  display: grid;
+  place-items: center;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+}
+.main-content .empty-state h3 {
+  margin: 0;
+  font-size: var(--ds-title);
+  line-height: 1.25;
+  font-weight: 600;
+}
+.main-content .empty-state p {
+  margin: 0 0 var(--ds-space-2);
+  font-size: var(--ds-text);
+  color: var(--muted);
+}
+.main-content .workspace-note {
+  margin-top: var(--ds-space-3);
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+
+/* Narrow tab or split window */
+@media (max-width: 900px) {
+  .main-content .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .main-content .download-card {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .main-content .row-date {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+  .main-content .page-heading {
+    flex-wrap: wrap;
+  }
+  .main-content .download-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .main-content .row-date {
+    display: flex;
+    grid-column: 2;
+    flex-direction: row;
+    gap: var(--ds-space-2);
+  }
+  .main-content .row-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+  .main-content .filter-controls,
+  .main-content .filter-controls .ds-select {
+    flex: 1 1 auto;
+  }
+  .main-content .stat-card .stat-art {
+    display: none;
+  }
+}
+@media (max-width: 380px) {
+  .main-content .stats-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Tools: adding links on the left as one joined group, managing on the right as quiet buttons. */
+.main-content .workspace-actions {
+  align-items: center;
+  justify-content: space-between;
+}
+.main-content .tool-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-1);
+}
+.main-content .tool-group.is-joined {
+  gap: 0;
+}
+.main-content .tool-group.is-joined .ds-btn {
+  border-radius: 0;
+  margin-left: -1px;
+}
+.main-content .tool-group.is-joined .ds-btn:first-child {
+  margin-left: 0;
+  border-radius: var(--ds-radius) 0 0 var(--ds-radius);
+}
+.main-content .tool-group.is-joined .ds-btn:last-child {
+  border-radius: 0 var(--ds-radius) var(--ds-radius) 0;
+}
+.main-content .tool-group.is-end {
+  margin-left: auto;
+}
+
+/* Bulk bar: select all, then actions in groups, with Remove set apart on the right. */
+.main-content .bulk-toolbar {
+  gap: var(--ds-space-3);
+  background: var(--hover);
+}
+.main-content .bulk-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  margin: 0;
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  font-weight: 500;
+  color: var(--text);
+}
+.main-content .bulk-divider {
+  width: 1px;
+  height: var(--ds-space-4);
+  margin: 0;
+  background: var(--border);
+}
+.main-content .bulk-actions,
+.main-content .bulk-time {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-1);
+}
+.main-content .bulk-actions .ds-select,
+.main-content .bulk-time .ds-datepicker {
+  width: auto;
+  min-width: 160px;
+}
+.main-content .bulk-actions > .ds-select {
+  margin-right: var(--ds-space-1);
+}
+.main-content .bulk-remove {
+  margin-left: auto;
+}
+@media (max-width: 640px) {
+  .main-content .tool-group.is-end {
+    margin-left: 0;
+  }
+  .main-content .bulk-divider {
+    display: none;
+  }
+}
+
+/* The list fills the rest of the window, so an empty list is centred in it, not left at the top. */
+.main-content .download-list {
+  display: flex;
+  flex-direction: column;
+}
+.main-content .download-list > .download-card {
+  flex: none;
+}
+.main-content .download-list > .empty-state {
+  flex: 1 1 auto;
+  justify-content: center;
+  min-height: 200px;
+}
+
+/* Compact top area so the list always has room: slim one-line notices, low stat cards. */
+.main-content .ds-alert.is-spaced {
+  margin: 0 0 var(--ds-space-2);
+  padding: var(--ds-space-2) var(--ds-space-3);
+  align-items: center;
+}
+.main-content .ds-alert .ds-alert-body {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: nowrap;
+  gap: var(--ds-space-2);
+  min-width: 0;
+}
+.main-content .ds-alert .ds-alert-body strong {
+  flex: none;
+}
+.main-content .ds-alert .ds-alert-body p {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.main-content .stat-card .stat-art {
+  display: none;
+}
+.main-content .stat-card {
+  padding: var(--ds-space-3) var(--ds-space-4);
+}
+.main-content .stats-grid {
+  margin-bottom: var(--ds-space-3);
+}
+.main-content .page-heading {
+  margin-bottom: var(--ds-space-3);
+}
+
+/* Stat cards: label on top, value and note on one row, so the cards stay low. */
+.main-content .stat-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: var(--ds-space-3);
+  row-gap: var(--ds-space-1);
+}
+.main-content .stat-card .stat-label {
+  grid-column: 1 / -1;
+}
+.main-content .stat-card .stat-foot {
+  justify-self: end;
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.main-content .stat-card .stat-meter {
+  grid-column: 1 / -1;
+}
+.main-content .stat-card .stat-meter b {
+  display: none;
+}
+.main-content.fit-page .breadcrumb,
+.main-content.fit-page .breadcrumbs {
+  display: none;
+}
+.main-content .ds-alert .ds-alert-body {
+  flex: 1 1 0;
+}
+.main-content .ds-alert .ds-alert-body strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.main-content .ds-alert .ds-alert-actions {
+  flex: none;
+}
+@media (max-width: 900px) {
+  .main-content .ds-alert .ds-alert-body p {
+    display: none;
+  }
+}
+.app-shell .local-indicator {
+  white-space: nowrap;
+}
+@media (max-width: 780px) {
+  .app-shell .local-indicator {
+    display: none;
+  }
+}
+
+.main-content .stat-card .stat-value,
+.main-content .stat-card .stat-value.accent-text {
+  text-align: left;
+  justify-self: start;
+}
+
+/* Finished and idle rows keep the accent fill instead of the old faded grey. */
+.main-content .download-card:not(.is-active) .progress > span {
+  background: var(--accent);
+  opacity: 1;
+}
+.main-content .download-card.is-paused .progress > span,
+.main-content .download-card.is-queued .progress > span {
+  background: var(--muted);
+}
+.main-content .download-card.is-failed .progress > span {
+  background: var(--danger);
+}
+
+.main-content .stat-card .stat-value,
+.main-content .stat-card .stat-value.accent-text {
+  display: block;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.main-content .stats-grid > .stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  grid-template-columns: none;
+  justify-content: flex-start;
+  text-align: left;
+}
+.main-content .stats-grid > .stat-card > * {
+  margin-left: 0;
+  margin-right: 0;
+}
+.main-content .stats-grid > .stat-card > .stat-label {
+  align-self: stretch;
+}
+
+/* The View options popover hangs below the card header, so the card must not clip it. */
+.main-content .downloads-section {
+  overflow: visible;
+}
+.main-content .downloads-section .download-list {
+  border-bottom-left-radius: var(--ds-radius-xl);
+  border-bottom-right-radius: var(--ds-radius-xl);
+}

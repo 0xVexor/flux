@@ -137,6 +137,10 @@ export interface DownloadQueue {
 }
 export interface Settings {
   queues: DownloadQueue[];
+  /** Schedule of the main queue. Absent until the main queue is scheduled. */
+  defaultQueue?: DownloadQueue;
+  /** The queue new downloads join when none is chosen. Absent or "default" is the main queue. */
+  newQueueId?: string;
   /** Ask in the toolbar popup which queue a captured download joins (when named queues exist). */
   askQueue: boolean;
   /** Show the Add Download dialog in the toolbar popup before a captured download starts. */

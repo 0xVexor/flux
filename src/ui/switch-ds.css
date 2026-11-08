@@ -1,0 +1,60 @@
+/*
+ * The one switch used everywhere (Add download, the popup, dialogs, Settings): 32 by 18, a 16 px
+ * thumb that moves 14 px. It is loaded last and written to win over the older checkbox rules,
+ * so every switch looks the same in every place.
+ */
+:is(.switch-row, .switch-static):is(.switch-row, .switch-static) input[type='checkbox'] {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--border-strong);
+  box-shadow: var(--ds-shadow-xs);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+:is(.switch-row, .switch-static):is(.switch-row, .switch-static) input[type='checkbox']:checked {
+  background: var(--accent);
+  border-color: transparent;
+}
+:is(.switch-row, .switch-static):is(.switch-row, .switch-static)
+  input[type='checkbox']:is(:checked, :not(:checked))::after {
+  display: none;
+}
+:is(.switch-row, .switch-static):is(.switch-row, .switch-static)
+  input[type='checkbox']:is(:checked, :not(:checked))::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text);
+  transform: none;
+  transition: left 0.15s;
+}
+:root[data-theme='light']
+  :is(.switch-row, .switch-static):is(.switch-row, .switch-static)
+  input[type='checkbox']:is(:checked, :not(:checked))::before {
+  background: var(--surface);
+}
+:is(.switch-row, .switch-static):is(.switch-row, .switch-static)
+  input[type='checkbox']:checked::before {
+  left: 14px;
+  background: var(--accent-ink);
+}
+:is(.switch-row, .switch-static):is(.switch-row, .switch-static) input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-ring);
+}
+:is(.switch-row, .switch-static):is(.switch-row, .switch-static) input[type='checkbox']:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

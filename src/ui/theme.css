@@ -8,3 +8,8 @@
 @import './redesign.css';
 @import './manager/display-options.css';
 @import './manager/add-dialog-ds.css';
+@import './manager/manager-ds.css';
+@import './manager/shell-ds.css';
+@import './manager/dialogs-ds.css';
+@import './settings/settings-ds.css';
+@import './switch-ds.css';

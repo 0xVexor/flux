@@ -70,12 +70,12 @@ export function QueueFiles({
                 onChange={(event) => setTiming({ id: job.id, value: event.target.value })}
               />
               <button
-                className="button primary small"
+                className="ds-btn is-primary is-small"
                 onClick={() => run(() => schedule(job, new Date(timing.value).getTime()))}
               >
                 Set
               </button>
-              <button className="icon-button" aria-label="Cancel" onClick={() => setTiming(null)}>
+              <button className="ds-icon-btn is-small" aria-label="Cancel" onClick={() => setTiming(null)}>
                 <X size={14} />
               </button>
             </span>
@@ -84,7 +84,7 @@ export function QueueFiles({
               {job.state === 'QUEUED' && (
                 <>
                   <button
-                    className="icon-button"
+                    className="ds-icon-btn is-small"
                     title="Move up"
                     aria-label={`Move ${job.filename} up`}
                     disabled={index === 0}
@@ -93,7 +93,7 @@ export function QueueFiles({
                     <ArrowUp size={14} />
                   </button>
                   <button
-                    className="icon-button"
+                    className="ds-icon-btn is-small"
                     title="Move down"
                     aria-label={`Move ${job.filename} down`}
                     disabled={index === own.length - 1}
@@ -105,7 +105,7 @@ export function QueueFiles({
               )}
               {!isActive(job) && (
                 <button
-                  className="icon-button accent-text"
+                  className="ds-icon-btn is-small is-accent"
                   title="Start now (ignores the schedule)"
                   aria-label={`Start ${job.filename} now`}
                   onClick={() => run(() => manager.action(job.id, 'start'))}
@@ -115,7 +115,7 @@ export function QueueFiles({
               )}
               {(isActive(job) || job.state === 'QUEUED') && (
                 <button
-                  className="icon-button"
+                  className="ds-icon-btn is-small"
                   title="Hold (don’t download yet)"
                   aria-label={`Hold ${job.filename}`}
                   onClick={() => run(() => manager.action(job.id, 'pause'))}
@@ -125,7 +125,7 @@ export function QueueFiles({
               )}
               {job.state === 'PAUSED' && (
                 <button
-                  className="text-button"
+                  className="ds-btn is-ghost is-small"
                   title="Put back in line"
                   onClick={() => run(() => manager.action(job.id, 'resume'))}
                 >
@@ -133,7 +133,7 @@ export function QueueFiles({
                 </button>
               )}
               <button
-                className="icon-button"
+                className="ds-icon-btn is-small"
                 title="Start at a set time"
                 aria-label={`Start ${job.filename} at a set time`}
                 onClick={() =>
@@ -147,7 +147,7 @@ export function QueueFiles({
               </button>
               {job.scheduledAt && job.state === 'QUEUED' && (
                 <button
-                  className="text-button"
+                  className="ds-btn is-ghost is-small"
                   title="Remove the start time"
                   onClick={() => run(() => schedule(job, null))}
                 >

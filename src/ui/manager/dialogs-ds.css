@@ -1,0 +1,857 @@
+/*
+ * Every dialog except Add download (which has add-dialog-ds.css): details, several links,
+ * queues and the queue file list. They use the same spec as the rest: labels 14/500 above a
+ * 36 px control, 16 px between fields, hairline borders, one filled button per dialog.
+ * Scoped with :not(:has(.add-form)) so it never touches the Add download dialog.
+ */
+.modal:not(:has(.add-form)) {
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-xl);
+  box-shadow: var(--shadow);
+}
+.modal::backdrop {
+  background: rgb(0 0 0 / 0.4);
+  backdrop-filter: none;
+}
+.modal:not(:has(.add-form)) .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ds-space-3) var(--ds-space-4);
+}
+.modal:not(:has(.add-form)) .modal-header h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  margin: 0;
+  font-size: var(--ds-title);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+.modal:not(:has(.add-form)) > .form-stack,
+.modal:not(:has(.add-form)) > .detail-body {
+  padding: var(--ds-space-4) var(--ds-space-4) 0;
+}
+.modal:not(:has(.add-form)) .form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4);
+}
+.modal:not(:has(.add-form)) .form-grid,
+.modal:not(:has(.add-form)) .grid-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ds-space-4);
+}
+.modal:not(:has(.add-form)) .modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ds-space-2);
+  margin: var(--ds-space-4) calc(var(--ds-space-4) * -1) 0;
+  padding: var(--ds-space-3) var(--ds-space-4);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: none;
+}
+.modal:not(:has(.add-form)) .modal-footer .footer-summary {
+  margin-right: auto;
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+
+/* Intro: a line of text with a plain icon, not a coloured tile. */
+.modal:not(:has(.add-form)) .dialog-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-3);
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.modal:not(:has(.add-form)) .intro-icon {
+  display: inline-grid;
+  place-items: center;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+}
+.modal:not(:has(.add-form)) .intro-icon svg {
+  width: 16px;
+  height: 16px;
+  margin-top: calc((var(--ds-text-lh) - var(--ds-space-4)) / 2);
+}
+.modal:not(:has(.add-form)) .dialog-intro h3 {
+  margin: 0;
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.modal:not(:has(.add-form)) .dialog-intro p {
+  margin: 0;
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  color: var(--muted);
+}
+
+/* Labels sit above the control, 8 px apart. */
+.modal:not(:has(.add-form))
+  label:not(.checkbox-label):not(.check):not(.switch-row):not(.ds-btn):not(.day-chip):not(.choice):not(.queue-file):not(.dlg-option):not(.batch-item):not(.batch-paused) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2);
+  margin: 0;
+  font-size: var(--ds-text);
+  font-weight: 500;
+  line-height: var(--ds-text-lh);
+  color: var(--text);
+}
+.modal:not(:has(.add-form)) .muted,
+.modal:not(:has(.add-form)) small {
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* Text fields */
+.modal:not(:has(.add-form))
+  :is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='hidden']), select, textarea) {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--ds-h);
+  padding: 0 var(--ds-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius);
+  background-color: transparent;
+  box-shadow: var(--ds-shadow-xs);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--ds-text);
+  font-weight: 400;
+  line-height: var(--ds-text-lh);
+}
+.modal:not(:has(.add-form)) textarea {
+  height: auto;
+  min-height: calc(var(--ds-h) * 3);
+  padding: var(--ds-space-2) var(--ds-space-3);
+  resize: vertical;
+}
+.modal:not(:has(.add-form)) :is(input, select, textarea)::placeholder {
+  color: var(--muted);
+}
+.modal:not(:has(.add-form)) :is(input, select, textarea):focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ds-ring);
+}
+.modal:not(:has(.add-form)) :is(input, select, textarea):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.modal:not(:has(.add-form)) input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+/* Checkbox: 16 px, 4 px corners, a drawn check. */
+.modal:not(:has(.add-form)) input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--ds-radius-sm);
+  background: transparent;
+  box-shadow: var(--ds-shadow-xs);
+}
+.modal:not(:has(.add-form)) input[type='checkbox']:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.modal:not(:has(.add-form)) input[type='checkbox']:checked::after {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  transform: none;
+  background: var(--accent-ink);
+  -webkit-mask: url('../assets/check.svg?no-inline') center / 14px no-repeat;
+  mask: url('../assets/check.svg?no-inline') center / 14px no-repeat;
+}
+.modal:not(:has(.add-form)) :is(.checkbox-label, .check, .switch-row) {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  font-size: var(--ds-text);
+  font-weight: 500;
+  line-height: var(--ds-text-lh);
+  color: var(--text);
+}
+
+/* Notices inside dialogs */
+.modal:not(:has(.add-form)) :is(.notice, .error-message, .error-text) {
+  padding: var(--ds-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-lg);
+  background: transparent;
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+}
+.modal:not(:has(.add-form)) :is(.error-message, .error-text) {
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* Cards and rows inside dialogs: hairline, 8 px corners, no tinted fills. */
+.modal:not(:has(.add-form)) :is(.queue-item, .queue-section, .batch-review, .series-builder, .batch-preview, .detail-stats, .detail-browser-info, .queue-empty) {
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-lg);
+  background: transparent;
+  box-shadow: none;
+}
+.modal:not(:has(.add-form)) .queue-empty {
+  border-style: solid;
+}
+.modal:not(:has(.add-form)) .batch-item,
+.modal:not(:has(.add-form)) .queue-file {
+  border-bottom: 1px solid var(--border);
+}
+
+/* Download details: file header without the tinted tile, plain percentage. */
+.modal:not(:has(.add-form)) .detail-file-icon {
+  display: inline-grid;
+  place-items: center;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+}
+.modal:not(:has(.add-form)) .detail-title h3 {
+  margin: 0;
+  font-size: var(--ds-title);
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+.modal:not(:has(.add-form)) .detail-percent {
+  font-size: var(--ds-title);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.modal:not(:has(.add-form)) .progress.large {
+  height: var(--ds-bar);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.modal:not(:has(.add-form)) .progress.large > span {
+  border-radius: 999px;
+  background: var(--accent);
+}
+.modal:not(:has(.add-form)) .detail-tabs {
+  display: flex;
+  gap: var(--ds-space-1);
+  border-bottom: 1px solid var(--border);
+}
+.modal:not(:has(.add-form)) .detail-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  height: var(--ds-h);
+  padding: 0 var(--ds-space-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--ds-text);
+  font-weight: 500;
+  cursor: pointer;
+}
+.modal:not(:has(.add-form)) .detail-tabs button[aria-selected='true'],
+.modal:not(:has(.add-form)) .detail-tabs button.selected {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+.modal:not(:has(.add-form)) .detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-2);
+}
+.ds-icon-btn.is-danger-text {
+  color: var(--danger);
+}
+
+@media (max-width: 560px) {
+  .modal:not(:has(.add-form)) .form-grid,
+  .modal:not(:has(.add-form)) .grid-two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A file picker hides behind its button; a row of dialog buttons sits on the right. */
+.modal .ds-btn {
+  position: relative;
+}
+.modal .ds-btn > input[type='file'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.modal:not(:has(.add-form)) .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ds-space-2);
+}
+
+.modal:not(:has(.add-form)) label :is(input, select, textarea) {
+  margin: 0;
+}
+
+/* Dialog anatomy: header (title and one-line description), scrolling body, pinned footer. */
+.modal:not(:has(.add-form)) .modal-header {
+  align-items: flex-start;
+  padding: var(--ds-space-4);
+  border-bottom: 1px solid var(--border);
+}
+.modal:not(:has(.add-form)) .modal-heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-1);
+  min-width: 0;
+}
+.modal:not(:has(.add-form)) .modal-heading p {
+  margin: 0;
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  color: var(--muted);
+}
+.modal:not(:has(.add-form)) .dialog-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.modal:not(:has(.add-form)) .dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-6);
+  max-height: calc(100dvh - 220px);
+  padding: var(--ds-space-4);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.modal:not(:has(.add-form)) .dialog-body::-webkit-scrollbar {
+  display: none;
+}
+.modal:not(:has(.add-form)) .dialog-form .modal-footer {
+  margin: 0;
+}
+.modal:not(:has(.add-form)) .dlg-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-6);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.modal:not(:has(.add-form)) .dlg-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4);
+}
+.modal:not(:has(.add-form)) .dlg-section > h3 {
+  margin: 0;
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  font-weight: 500;
+  color: var(--muted);
+}
+.modal:not(:has(.add-form)) .dlg-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ds-space-4);
+}
+.modal:not(:has(.add-form)) .dlg-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-lg);
+  cursor: pointer;
+}
+.modal:not(:has(.add-form)) .dlg-option:has(input:checked) {
+  border-color: var(--accent);
+}
+.modal:not(:has(.add-form)) .dlg-option input {
+  margin-top: calc((var(--ds-text-lh) - var(--ds-space-4)) / 2);
+}
+.modal:not(:has(.add-form)) .dlg-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-1);
+}
+.modal:not(:has(.add-form)) .dlg-option strong {
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  font-weight: 500;
+}
+.modal:not(:has(.add-form)) .dlg-note {
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+.modal:not(:has(.add-form)) .dlg-note summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+.modal:not(:has(.add-form)) .dlg-note p {
+  margin: var(--ds-space-2) 0 0;
+}
+@media (max-width: 640px) {
+  .modal:not(:has(.add-form)) .dlg-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.modal:not(:has(.add-form)) .dlg-option {
+  flex-direction: row;
+}
+.modal:not(:has(.add-form)) .dlg-section:has(.dlg-option) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.modal:not(:has(.add-form)) .dlg-section:has(.dlg-option) > h3 {
+  grid-column: 1 / -1;
+}
+@media (max-width: 640px) {
+  .modal:not(:has(.add-form)) .dlg-section:has(.dlg-option) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Add multiple links: links and options on the left, a live review list on the right. */
+.modal:not(:has(.add-form)) .batch-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: var(--ds-space-6);
+  align-items: stretch;
+  max-height: calc(100dvh - 200px);
+}
+.modal:not(:has(.add-form)) .batch-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-6);
+  min-width: 0;
+}
+.modal:not(:has(.add-form)) .batch-input-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.modal:not(:has(.add-form)) .batch-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+}
+.modal:not(:has(.add-form)) .batch-review-col {
+  padding-left: var(--ds-space-6);
+  border-left: 1px solid var(--border);
+  gap: var(--ds-space-3);
+}
+.modal:not(:has(.add-form)) .batch-review-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--ds-h-sm);
+}
+.modal:not(:has(.add-form)) .batch-review-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  margin: 0;
+  font-size: var(--ds-text);
+  font-weight: 600;
+}
+.modal:not(:has(.add-form)) .batch-preview {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  border: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.modal:not(:has(.add-form)) .batch-preview::-webkit-scrollbar {
+  display: none;
+}
+.modal:not(:has(.add-form)) .batch-item {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-2) 0;
+  font-size: var(--ds-text);
+  font-weight: 400;
+}
+.modal:not(:has(.add-form)) .batch-item > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.modal:not(:has(.add-form)) .batch-empty {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  margin: 0;
+  padding: var(--ds-space-6);
+  border: 1px dashed var(--border);
+  border-radius: var(--ds-radius-lg);
+  text-align: center;
+  font-size: var(--ds-text);
+  color: var(--muted);
+}
+.modal:not(:has(.add-form)) .series-builder {
+  padding: var(--ds-space-3);
+}
+@media (max-width: 760px) {
+  .modal:not(:has(.add-form)) .batch-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .modal:not(:has(.add-form)) .batch-review-col {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+/* Queues: each queue is a plain row, status is a dot and a word. */
+.modal:not(:has(.add-form)) .queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-3);
+}
+.modal:not(:has(.add-form)) .queue-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-3) var(--ds-space-4);
+}
+.modal:not(:has(.add-form)) .queue-item > :nth-child(n + 3) {
+  grid-column: 1 / -1;
+}
+.modal:not(:has(.add-form)) .queue-title {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+}
+.modal:not(:has(.add-form)) .queue-status {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: var(--ds-small);
+  font-weight: 400;
+  color: var(--muted);
+}
+.modal:not(:has(.add-form)) .queue-status::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: var(--ds-space-1);
+  border-radius: 50%;
+  background: var(--muted);
+}
+.modal:not(:has(.add-form)) .queue-status.live::before {
+  background: var(--accent);
+}
+.modal:not(:has(.add-form)) .queue-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+}
+.modal:not(:has(.add-form)) .queue-empty {
+  flex-direction: row;
+  justify-content: center;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-4);
+  border-style: dashed;
+}
+
+.modal:not(:has(.add-form)) .batch-col .dlg-section:has(.dlg-option) {
+  display: flex;
+  flex-direction: column;
+}
+.modal:not(:has(.add-form)) .batch-columns {
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.modal:not(:has(.add-form)) .batch-columns::-webkit-scrollbar {
+  display: none;
+}
+.modal:not(:has(.add-form)) .batch-item {
+  flex-direction: row;
+  align-items: center;
+  text-align: left;
+}
+
+.modal:not(:has(.add-form)) .batch-item > span {
+  color: var(--text);
+}
+.modal:not(:has(.add-form)) .batch-item > span small {
+  color: var(--muted);
+}
+
+/* Add multiple links v3: one column. Actions sit on the label row, the series is a quiet expander. */
+.modal:not(:has(.add-form)) .batch-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-1);
+}
+.modal:not(:has(.add-form)) .batch-dialog .dlg-section {
+  gap: var(--ds-space-2);
+}
+.modal:not(:has(.add-form)) .series-builder {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+.modal:not(:has(.add-form)) .series-builder > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  min-height: var(--ds-h-sm);
+  list-style: none;
+  cursor: pointer;
+  font-size: var(--ds-text);
+  font-weight: 500;
+  color: var(--text);
+}
+.modal:not(:has(.add-form)) .series-builder > summary::-webkit-details-marker {
+  display: none;
+}
+.modal:not(:has(.add-form)) .series-builder > summary small {
+  margin-left: auto;
+}
+.modal:not(:has(.add-form)) .series-builder[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2);
+  padding: var(--ds-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-lg);
+}
+.modal:not(:has(.add-form)) .series-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) calc(var(--ds-h) * 3) auto;
+  align-items: end;
+  gap: var(--ds-space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.modal:not(:has(.add-form)) .batch-preview {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(var(--ds-h) * 6);
+  overflow-y: auto;
+  scrollbar-width: none;
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-lg);
+  padding: 0 var(--ds-space-3);
+}
+.modal:not(:has(.add-form)) .batch-dialog .dialog-body {
+  max-height: calc(100dvh - 190px);
+}
+@media (max-width: 560px) {
+  .modal:not(:has(.add-form)) .series-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.modal:not(:has(.add-form)) .batch-dialog .dlg-section:has(.dlg-option) {
+  display: flex;
+  flex-direction: column;
+}
+.modal:not(:has(.add-form)) .batch-dialog .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+/* A dialog never scrolls sideways; the Add download form was 2 px wider than its frame. */
+.modal {
+  overflow-x: hidden;
+}
+.modal .add-form {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+.modal .add-form {
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Queue form: one 16 px rhythm, no tinted boxes. */
+.modal:not(:has(.add-form)) .queues-dialog form > h3 {
+  margin: 0;
+  font-size: var(--ds-title);
+  line-height: 1.25;
+  font-weight: 600;
+}
+.modal:not(:has(.add-form)) details:not(.dlg-note) {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-lg);
+  padding: var(--ds-space-3);
+}
+.modal:not(:has(.add-form)) details > summary {
+  cursor: pointer;
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  font-weight: 500;
+}
+.modal:not(:has(.add-form)) .queues-dialog .form-stack {
+  gap: var(--ds-space-4);
+}
+.modal:not(:has(.add-form)) .switch-row.queue-section {
+  padding: var(--ds-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-lg);
+}
+
+/*
+ * Add multiple links, designed on the 24 / 16 / 8 rhythm: blocks 24 apart, fields 16 apart,
+ * a label 8 above its control. The dialog is wide, so nothing has to be squeezed.
+ */
+.modal:not(:has(.add-form)) .batch-dialog .dialog-body {
+  gap: var(--ds-space-6);
+  padding: var(--ds-space-6);
+}
+.modal:not(:has(.add-form)) .batch-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2);
+  min-width: 0;
+}
+.modal:not(:has(.add-form)) .batch-label {
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  font-weight: 500;
+}
+.modal:not(:has(.add-form)) .batch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--ds-space-3);
+  margin-top: var(--ds-space-1);
+}
+.modal:not(:has(.add-form)) .batch-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ds-space-2);
+}
+.modal:not(:has(.add-form)) .batch-hint {
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+.modal:not(:has(.add-form)) .series-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) calc(var(--ds-h) * 3) auto;
+  align-items: end;
+  gap: var(--ds-space-4);
+  min-width: 0;
+  margin: var(--ds-space-2) 0 0;
+  padding: var(--ds-space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-lg);
+}
+.modal:not(:has(.add-form)) .series-help {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--ds-small);
+  line-height: var(--ds-small-lh);
+  color: var(--muted);
+}
+.modal:not(:has(.add-form)) .batch-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--ds-space-6);
+  align-content: start;
+  max-height: calc(var(--ds-h) * 6);
+  padding: var(--ds-space-1) var(--ds-space-4);
+}
+.modal:not(:has(.add-form)) .batch-item {
+  padding: var(--ds-space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+.modal:not(:has(.add-form)) .batch-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ds-space-4);
+}
+.modal:not(:has(.add-form)) .batch-paused {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-3);
+  cursor: pointer;
+}
+.modal:not(:has(.add-form)) .batch-paused input {
+  margin-top: calc((var(--ds-text-lh) - var(--ds-space-4)) / 2);
+}
+.modal:not(:has(.add-form)) .batch-paused > span {
+  display: flex;
+  flex-direction: column;
+}
+.modal:not(:has(.add-form)) .batch-paused strong {
+  font-size: var(--ds-text);
+  line-height: var(--ds-text-lh);
+  font-weight: 500;
+}
+@media (max-width: 640px) {
+  .modal:not(:has(.add-form)) .series-panel,
+  .modal:not(:has(.add-form)) .batch-options,
+  .modal:not(:has(.add-form)) .batch-preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.modal:not(:has(.add-form)) .batch-paused,
+.modal:not(:has(.add-form)) .batch-paused strong {
+  color: var(--text);
+}
+.modal:not(:has(.add-form)) .batch-paused small {
+  color: var(--muted);
+}
+
+/* The schedule block is a plain group, not a tinted card. */
+.modal:not(:has(.add-form)) .queue-schedule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4);
+  padding: var(--ds-space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--ds-radius-lg);
+  background: transparent;
+}

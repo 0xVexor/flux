@@ -92,7 +92,7 @@ export function showPageToast(
 
   const host = document.createElement('div');
   host.id = id;
-  host.style.cssText = 'all:initial;position:fixed;top:16px;right:16px;z-index:2147483647;';
+  host.style.cssText = 'all:initial;direction:ltr;position:fixed;top:16px;right:16px;z-index:2147483647;';
   const root = host.attachShadow({ mode: 'closed' });
   const card = make(
     'div',

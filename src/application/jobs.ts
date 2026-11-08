@@ -4,6 +4,7 @@ import {
   type NewDownload,
   type Settings,
 } from '../domain/model';
+import { newQueueId } from '../domain/queues';
 import { filenameFromHeaders, categoryOf, folderSegments, sanitizeFilename } from '../shared/files';
 import { validateUrl } from '../shared/security';
 export const downloadIdentity = (url: string, audioUrl?: string, dash?: NewDownload['dash']) =>
@@ -100,7 +101,7 @@ export function createJob(
           },
         }
       : {}),
-    queueId: input.queueId ?? 'default',
+    queueId: input.queueId ?? newQueueId(settings),
     url,
     filename,
     category: input.category ?? categoryOf(filename),

@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from 'react';
+import { Select } from '../components/Select';
 import {
   ExternalLink,
   Save,
@@ -147,7 +148,7 @@ export function Details({
           <div className="notice">
             Automatic retry {(job.queueRetries ?? 0) + 1} after{' '}
             {new Date(job.queueRetryAt).toLocaleString()}. Queue windows and limits still apply.
-            <button className="text-button" onClick={() => action('pause')}>
+            <button className="ds-btn is-ghost is-small" onClick={() => action('pause')}>
               Stop automatic retries
             </button>
           </div>
@@ -216,7 +217,7 @@ export function Details({
             </label>
             {!browser && !job.pageFile && source !== job.url && (
               <button
-                className="button secondary align-start"
+                className="ds-btn is-outline align-start"
                 disabled={
                   busy ||
                   source === job.url ||
@@ -317,14 +318,14 @@ export function Details({
               <div className="form-grid">
                 <label>
                   Download queue
-                  <select name="queueId" defaultValue={job.queueId ?? 'default'}>
+                  <Select name="queueId" defaultValue={job.queueId ?? 'default'}>
                     <option value="default">Default queue</option>
                     {manager.getSnapshot().settings.queues.map((queue) => (
                       <option key={queue.id} value={queue.id}>
                         {queue.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <label>
                   File name
@@ -334,14 +335,14 @@ export function Details({
               <div className="form-grid">
                 <label>
                   Priority
-                  <select name="priority" defaultValue={job.priority}>
+                  <Select name="priority" defaultValue={job.priority}>
                     <option value="2">High</option>
                     <option value="0">Normal</option>
                     <option value="-2">Low</option>
                     {![2, 0, -2].includes(job.priority) && (
                       <option value={job.priority}>{job.priority}</option>
                     )}
-                  </select>
+                  </Select>
                 </label>
                 <label>
                   Speed limit <span className="optional">KB/s · 0 = unlimited</span>
@@ -355,22 +356,22 @@ export function Details({
                 {!job.media && (
                   <label>
                     Connection mode
-                    <select name="mode" defaultValue={job.mode}>
+                    <Select name="mode" defaultValue={job.mode}>
                       <option value="auto">Adaptive</option>
                       <option value="manual">Manual</option>
-                    </select>
+                    </Select>
                   </label>
                 )}
                 {!job.media && (
                   <label>
                     Maximum connections
-                    <select name="maxConnections" defaultValue={job.maxConnections}>
+                    <Select name="maxConnections" defaultValue={job.maxConnections}>
                       {[1, 2, 4, 8, 16].map((n) => (
                         <option key={n} value={n}>
                           {n}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                 )}
                 {job.media && (
@@ -395,7 +396,7 @@ export function Details({
                   {error}
                 </p>
               )}
-              <button className="button secondary align-start" disabled={busy}>
+              <button className="ds-btn is-outline align-start" disabled={busy}>
                 <Save size={15} />
                 {busy ? 'Saving…' : 'Save changes'}
               </button>
@@ -489,14 +490,14 @@ export function Details({
             !job.sha256 &&
             !['ASSEMBLING', 'COMPLETED', 'EXPORTING'].includes(job.state) && (
               <button
-                className="button secondary"
+                className="ds-btn is-outline"
                 onClick={() => run(() => manager.browserDownload(job.id))}
               >
                 <ExternalLink size={15} /> Use browser
               </button>
             )}
           {browser && (
-            <button className="button secondary" onClick={() => action('review-browser')}>
+            <button className="ds-btn is-outline" onClick={() => action('review-browser')}>
               <ExternalLink size={15} />
               Review browser download
             </button>
@@ -505,7 +506,7 @@ export function Details({
             (browser
               ? !job.browser?.missing && !job.browser?.erased
               : job.savedDownloadId != null) && (
-              <button className="button primary" onClick={() => action('show')}>
+              <button className="ds-btn is-primary" onClick={() => action('show')}>
                 Show in folder
               </button>
             )}
@@ -514,7 +515,7 @@ export function Details({
             (['ASSEMBLING', 'COMPLETED'].includes(job.state) ||
               (job.state === 'FAILED' && job.sha256)) && (
               <button
-                className="button primary"
+                className="ds-btn is-primary"
                 onClick={() => run(() => manager.exportFile(job.id))}
               >
                 <Download size={15} />
@@ -526,19 +527,19 @@ export function Details({
             (['ASSEMBLING', 'COMPLETED'].includes(job.state) ||
               (job.state === 'FAILED' && job.sha256)) && (
               <button
-                className="button secondary"
+                className="ds-btn is-outline"
                 onClick={() => run(() => manager.exportFile(job.id, true))}
               >
                 Save as…
               </button>
             )}
           {!browser && !job.pageFile && job.state === 'COMPLETED' && (
-            <button className="button secondary" onClick={() => action('redownload')}>
+            <button className="ds-btn is-outline" onClick={() => action('redownload')}>
               <RotateCcw size={15} /> Download again
             </button>
           )}
           <button
-            className="icon-button"
+            className="ds-icon-btn is-small"
             title="Move up in queue"
             disabled={browser}
             aria-label="Move up in queue"
@@ -547,7 +548,7 @@ export function Details({
             <ArrowUp size={17} />
           </button>
           <button
-            className="icon-button"
+            className="ds-icon-btn is-small"
             title="Move down in queue"
             disabled={browser}
             aria-label="Move down in queue"
@@ -557,7 +558,7 @@ export function Details({
           </button>
           {!['COMPLETED', 'CANCELED'].includes(job.state) && (
             <button
-              className="icon-button danger-text"
+              className="ds-icon-btn is-small is-danger-text"
               title="Cancel download"
               aria-label="Cancel download"
               onClick={() => {
@@ -569,7 +570,7 @@ export function Details({
             </button>
           )}
           <button
-            className="icon-button danger-text"
+            className="ds-icon-btn is-small is-danger-text"
             title="Remove download and local data"
             aria-label="Remove download and local data"
             onClick={() => {

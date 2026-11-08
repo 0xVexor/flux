@@ -91,6 +91,9 @@
   padding: 0;
   color: var(--muted);
 }
+.ds-icon-btn.is-accent {
+  color: var(--accent);
+}
 .ds-icon-btn.is-small {
   width: var(--ds-h-sm);
   height: var(--ds-h-sm);
@@ -526,4 +529,19 @@ a:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted);
+}
+
+/* Outside the toolbar popup the calendar floats over the page instead of pushing it down. */
+.ds-datepicker-panel.is-floating {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  width: 296px;
+  margin: 0;
+  overflow-y: auto;
+  box-shadow: var(--shadow);
+  scrollbar-width: none;
+}
+.ds-datepicker-panel.is-floating::-webkit-scrollbar {
+  display: none;
 }

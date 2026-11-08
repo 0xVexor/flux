@@ -13,7 +13,6 @@ import { HttpError, retryable } from './network/http';
 import { runHlsDownload } from './media/runner';
 import { reviewHls } from './media/network';
 import { reviewDash } from './media/dash-network';
-import { crawlSite } from './crawl/site';
 import type { MediaNetwork } from './media/network';
 const repository = new Repository();
 const controllers = new Map<string, AbortController>();
@@ -70,44 +69,8 @@ self.onmessage = (event: MessageEvent<WorkerCommand>) => {
     finishingRecordings.add(message.id);
     return;
   }
-  if (message.type === 'cancel-hls-review' || message.type === 'cancel-crawl') {
+  if (message.type === 'cancel-hls-review') {
     inspections.get(message.requestId)?.abort();
-    return;
-  }
-  if (message.type === 'crawl-site') {
-    const controller = new AbortController();
-    inspections.set(message.requestId, controller);
-    void crawlSite(
-      message.url,
-      message.options,
-      {
-        signal: controller.signal,
-        acquireHost: (host, signal) => hostSlots.acquire(host, signal),
-        checkAllowance: async (signal) => {
-          await budgetReady;
-          await budget.check(signal);
-        },
-        consume: async (bytes, signal) => {
-          await budgetReady;
-          await bandwidth.consume(bytes, signal);
-          await budget.consume(bytes, signal);
-        },
-        redirectPolicy: {
-          resolveRedirect: (from, location, signal) =>
-            networkDecision('redirect', from, location, signal),
-          prepareRequest: async (url, signal) => {
-            await networkDecision('prepare-request', url, null, signal);
-          },
-        },
-      },
-      (progress) => send({ type: 'crawl-progress', requestId: message.requestId, progress }),
-    )
-      .then(
-        (result) => send({ type: 'crawl-result', requestId: message.requestId, result }),
-        (error) =>
-          send({ type: 'crawl-result', requestId: message.requestId, error: safeError(error) }),
-      )
-      .finally(() => inspections.delete(message.requestId));
     return;
   }
   if (message.type === 'inspect-hls') {

@@ -14,7 +14,6 @@ import {
   Layers,
   Link2,
   Upload,
-  ChevronDown,
   ChevronRight,
   CircleAlert,
   Clock3,
@@ -31,8 +30,8 @@ import {
   Pause,
   Play,
   Plus,
-  Radio,
   RefreshCw,
+  Trash2,
   Search,
   Settings2,
   ShieldCheck,
@@ -45,14 +44,16 @@ import {
 import { manager } from '../../application/client';
 import type { DownloadJob, DownloadQueue, Category } from '../../domain/model';
 import type { Action } from '../../application/contracts';
-import { bytes, eta, hostname, isActive, percent, stateLabel } from '../components/format';
-import { Modal } from '../components/Modal';
+import { addedAt, bytes, eta, hostname, isActive, percent, stateLabel } from '../components/format';
+import { DateTimePicker } from '../components/DateTimePicker';
+import { CommandPalette, type PaletteItem } from '../components/CommandPalette';
+import { Select } from '../components/Select';
+import { useDismissed } from './dismissed';
 import { AddDownload } from './AddDownload';
 import { Details } from './Details';
 import { Settings } from '../settings/Settings';
 import { captureOrigins } from '../../shared/capture';
 import { BatchDownloads } from './BatchDownloads';
-import { CrawlSite } from './CrawlSite';
 import { Queues } from './Queues';
 import { queueStatus } from '../components/queue-status';
 import { SaveSetup } from './SaveSetup';
@@ -87,11 +88,11 @@ const categoryIcons = {
   Other: File,
 };
 const navigation = [
-  { id: 'all', label: 'All downloads', Icon: LayoutGrid },
-  { id: 'active', label: 'Downloading', Icon: ArrowDownToLine },
-  { id: 'queued', label: 'Queued', Icon: Clock3 },
-  { id: 'completed', label: 'Completed', Icon: CheckCheck },
-  { id: 'failed', label: 'Failed', Icon: CircleAlert },
+  { id: 'all', label: 'All downloads', Icon: LayoutGrid, tone: '' },
+  { id: 'active', label: 'Downloading', Icon: ArrowDownToLine, tone: 'is-live' },
+  { id: 'queued', label: 'Queued', Icon: Clock3, tone: 'is-warn' },
+  { id: 'completed', label: 'Completed', Icon: CheckCheck, tone: 'is-done' },
+  { id: 'failed', label: 'Failed', Icon: CircleAlert, tone: 'is-bad' },
 ];
 function matches(job: DownloadJob, view: string) {
   return (
@@ -102,6 +103,14 @@ function matches(job: DownloadJob, view: string) {
     (view === 'failed' && job.state === 'FAILED') ||
     job.category === view
   );
+}
+function statusDot(state: string) {
+  if (
+    ['DOWNLOADING', 'PROBING', 'RETRYING', 'EXPORTING', 'COMPLETED', 'ASSEMBLING'].includes(state)
+  )
+    return 'is-live';
+  if (['PAUSED', 'QUEUED', 'WAITING_FOR_NETWORK', 'PAUSING'].includes(state)) return 'is-warn';
+  return state === 'FAILED' ? 'is-bad' : '';
 }
 function JobCard({
   job,
@@ -151,6 +160,7 @@ function JobCard({
             {job.filename}
           </button>
           <span className={`status ${job.state.toLowerCase()}`}>
+            <span className={`ds-dot ${statusDot(job.state)}`} aria-hidden="true" />
             {retryScheduled
               ? 'Retry scheduled'
               : job.state === 'ASSEMBLING'
@@ -251,13 +261,17 @@ function JobCard({
           </div>
         </div>
       </div>
+      <div className="row-date" title={new Date(job.createdAt).toLocaleString()}>
+        <span>Added</span>
+        {addedAt(job.createdAt)}
+      </div>
       <div className="row-actions">
         {job.media?.recording &&
           !job.media.recording.finished &&
           job.segments.length > (job.media.transport === 'mpegts' ? 0 : 1) &&
           ['DOWNLOADING', 'PAUSED', 'FAILED', 'WAITING_FOR_NETWORK'].includes(job.state) && (
             <button
-              className="button secondary"
+              className="ds-btn is-outline is-small"
               onClick={() => action('finish-recording')}
               aria-label={`Finish recording ${job.filename}`}
             >
@@ -266,22 +280,22 @@ function JobCard({
           )}
         {retryScheduled && (
           <button
-            className="icon-button"
+            className="ds-icon-btn is-small"
             onClick={() => action('pause')}
             aria-label={`Stop automatic retries for ${job.filename}`}
             title="Stop automatic retries"
           >
-            <Pause size={18} />
+            <Pause size={16} />
           </button>
         )}
         {active && job.state !== 'PAUSING' && job.state !== 'EXPORTING' && (
           <button
-            className="icon-button"
+            className="ds-icon-btn is-small"
             onClick={() => action('pause')}
             aria-label={`Pause ${job.filename}`}
             title="Pause"
           >
-            <Pause size={18} />
+            <Pause size={16} />
           </button>
         )}
         {['PAUSED', 'WAITING_FOR_NETWORK', 'CANCELED'].includes(job.state) &&
@@ -289,27 +303,27 @@ function JobCard({
           canResume &&
           (!browser || job.state !== 'CANCELED') && (
             <button
-              className="icon-button accent-text"
+              className="ds-icon-btn is-small is-accent"
               onClick={() => action(job.state === 'CANCELED' ? 'redownload' : 'resume')}
               aria-label={`Resume ${job.filename}`}
               title="Resume"
             >
-              <Play size={18} />
+              <Play size={16} />
             </button>
           )}
         {job.state === 'QUEUED' && (
           <button
-            className="icon-button accent-text"
+            className="ds-icon-btn is-small is-accent"
             onClick={() => action('start')}
             aria-label={`Start ${job.filename}`}
             title="Start now"
           >
-            <Play size={18} />
+            <Play size={16} />
           </button>
         )}
         {job.state === 'FAILED' && !ready && canResume && (
           <button
-            className="icon-button"
+            className="ds-icon-btn is-small"
             onClick={() => action('retry')}
             aria-label={
               job.permissionOrigin
@@ -320,17 +334,17 @@ function JobCard({
               job.permissionOrigin ? `Grant access to ${job.permissionOrigin} and retry` : 'Retry'
             }
           >
-            <RefreshCw size={18} />
+            <RefreshCw size={16} />
           </button>
         )}
         {ready && (
           <button
-            className="icon-button accent-text"
+            className="ds-icon-btn is-small is-accent"
             onClick={exportFile}
             aria-label={`Save ${job.filename}`}
             title="Save file"
           >
-            <Download size={19} />
+            <Download size={16} />
           </button>
         )}
         {job.state === 'COMPLETED' &&
@@ -338,31 +352,31 @@ function JobCard({
             ? !job.browser?.missing && !job.browser?.erased
             : job.savedDownloadId != null) && (
             <button
-              className="icon-button accent-text"
+              className="ds-icon-btn is-small is-accent"
               aria-label={`Show ${job.filename} in folder`}
               title="Show in folder"
               onClick={() => action('show')}
             >
-              <FolderDown size={19} />
+              <FolderDown size={16} />
             </button>
           )}
         {browser && ['PAUSED', 'FAILED', 'CANCELED'].includes(job.state) && !canResume && (
           <button
-            className="icon-button"
+            className="ds-icon-btn is-small"
             aria-label={`Review browser download ${job.filename}`}
             title="Review original download in Chrome"
             onClick={() => action('review-browser')}
           >
-            <CircleAlert size={18} />
+            <CircleAlert size={16} />
           </button>
         )}
         <button
-          className="icon-button"
+          className="ds-icon-btn is-small"
           onClick={onDetails}
           aria-label={`Details for ${job.filename}`}
           title="Details and actions"
         >
-          <MoreHorizontal size={20} />
+          <MoreHorizontal size={16} />
         </button>
       </div>
     </article>
@@ -398,21 +412,13 @@ export function App() {
   const [error, setError] = useState(
     new URLSearchParams(location.hash.slice(1)).get('error') ?? '',
   );
-  const [media, setMedia] = useState<
-    { url: string; filename: string; media?: 'hls' | 'dash' }[] | null
-  >(null);
   const [initialMedia, setInitialMedia] = useState<'hls' | 'dash' | undefined>();
-  const [mediaBusy, setMediaBusy] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const display = useDisplayOptions();
   const [offers, setOffers] = useState<NativeOffer[]>([]);
   const [captureAccess, setCaptureAccess] = useState(false);
   const [batch, setBatch] = useState<string | null>(null);
-  const [crawler, setCrawler] = useState(false);
-  const [crawlBatch, setCrawlBatch] = useState<{ text: string; sessionOrigin?: string } | null>(
-    null,
-  );
   const [queuesOpen, setQueuesOpen] = useState(false);
   const [queueFilter, setQueueFilter] = useState('all');
   const [selection, setSelection] = useState(new Set<string>());
@@ -434,13 +440,16 @@ export function App() {
     };
   }, [snapshot.settings.interception]);
   const sidebarRef = useRef<HTMLElement>(null);
-  const globalSearch = useRef<HTMLInputElement>(null);
-  const [bannerHidden, setBannerHidden] = useState(false);
+  const [palette, setPalette] = useState(false);
+  const [captureDismissed, dismissCapture] = useDismissed('capture');
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      // Chrome keeps Ctrl+K for its own address-bar search, so the palette opens with / instead.
+      const target = event.target as HTMLElement | null;
+      const typing = !!target?.closest('input,textarea,select,[contenteditable="true"]');
+      if (event.key === '/' && !typing && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
-        globalSearch.current?.focus();
+        setPalette(true);
       }
     };
     window.addEventListener('keydown', key);
@@ -449,7 +458,7 @@ export function App() {
   const jobs = snapshot.jobs;
   const active = jobs.filter(isActive);
   const speed = active.reduce((n, j) => n + j.speed, 0);
-  const completed = jobs.filter((j) => j.state === 'COMPLETED');
+  const completed = jobs.filter((j) => ['COMPLETED', 'ASSEMBLING'].includes(j.state));
   const selectedJob = jobs.find((j) => j.id === selected);
   const run = (fn: () => Promise<unknown>) => {
     setError('');
@@ -535,27 +544,6 @@ export function App() {
             ? b.priority - a.priority || a.order - b.order
             : b.createdAt - a.createdAt,
     );
-  async function detect() {
-    setMediaBusy(true);
-    try {
-      setMedia(await manager.detectMedia());
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setMediaBusy(false);
-    }
-  }
-  async function grabLinks() {
-    setMediaBusy(true);
-    try {
-      const links = await manager.discoverLinks();
-      setBatch(links.map((item) => item.url).join('\n'));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setMediaBusy(false);
-    }
-  }
   const selectAll = () => setSelection(new Set(visible.map((job) => job.id)));
   const selectedJobs = jobs.filter((job) => selection.has(job.id));
   const bulk = (action: Action) =>
@@ -570,6 +558,152 @@ export function App() {
       for (const job of selectedJobs) await manager.action(job.id, action);
       setSelection(new Set());
     });
+  const openSettings = (anchor?: string) => {
+    changeView('settings');
+    if (anchor)
+      setTimeout(
+        () => window.dispatchEvent(new CustomEvent('flux:settings-tab', { detail: anchor })),
+        80,
+      );
+  };
+  const paletteItems: PaletteItem[] = [
+    ...navigation.map(({ id, label, Icon }) => ({
+      id: `go-${id}`,
+      group: 'Go to' as const,
+      label,
+      hint: `${jobs.filter((j) => matches(j, id)).length}`,
+      icon: <Icon size={16} aria-hidden="true" />,
+      keywords: 'page view downloads',
+      run: () => changeView(id),
+    })),
+    ...(Object.entries(categoryIcons) as [Category, typeof File][]).map(([category, Icon]) => ({
+      id: `go-${category}`,
+      group: 'Go to' as const,
+      label: category,
+      hint: 'File category',
+      icon: <Icon size={16} aria-hidden="true" />,
+      keywords: 'files type category',
+      run: () => changeView(category),
+    })),
+    {
+      id: 'go-settings',
+      group: 'Go to',
+      label: 'Settings',
+      icon: <Settings2 size={16} aria-hidden="true" />,
+      keywords: 'preferences options',
+      run: () => openSettings(),
+    },
+    ...(
+      [
+        ['settings-allowance', 'Download allowance', 'limit traffic data cap'],
+        ['settings-transfers', 'Transfers and connections', 'speed connections retries timeout'],
+        ['settings-schedule', 'Schedule', 'hours time window night'],
+        ['settings-saving', 'Saving files', 'folder destination category auto save'],
+        [
+          'settings-browser',
+          'Browser integration',
+          'capture intercept websites hosts notifications',
+        ],
+        ['settings-appearance', 'Appearance', 'theme dark light display'],
+        ['settings-storage', 'Storage', 'disk quota cache clear'],
+      ] as const
+    ).map(([anchor, label, keywords]) => ({
+      id: anchor,
+      group: 'Settings' as const,
+      label,
+      hint: 'Settings',
+      icon: <SlidersHorizontal size={16} aria-hidden="true" />,
+      keywords,
+      run: () => openSettings(anchor),
+    })),
+    {
+      id: 'act-add',
+      group: 'Actions',
+      label: 'Add download',
+      icon: <Plus size={16} aria-hidden="true" />,
+      keywords: 'new link url',
+      run: () => {
+        setInitialUrl('');
+        setAdd(true);
+      },
+    },
+    {
+      id: 'act-batch',
+      group: 'Actions',
+      label: 'Add multiple links',
+      icon: <Link2 size={16} aria-hidden="true" />,
+      keywords: 'batch paste list',
+      run: () => setBatch(''),
+    },
+    {
+      id: 'act-queues',
+      group: 'Actions',
+      label: 'Manage queues',
+      icon: <Layers size={16} aria-hidden="true" />,
+      keywords: 'queue schedule',
+      run: () => setQueuesOpen(true),
+    },
+    {
+      id: 'act-folder',
+      group: 'Actions',
+      label: 'Choose download folder',
+      icon: <FolderOpen size={16} aria-hidden="true" />,
+      keywords: 'save destination',
+      run: () => run(() => manager.chooseDownloadFolder()),
+    },
+    {
+      id: 'act-pause-all',
+      group: 'Actions',
+      label: 'Pause all',
+      icon: <Pause size={16} aria-hidden="true" />,
+      run: () => run(() => manager.pauseAll()),
+    },
+    {
+      id: 'act-resume-all',
+      group: 'Actions',
+      label: 'Resume all',
+      icon: <Play size={16} aria-hidden="true" />,
+      run: () => run(() => manager.resumeAll()),
+    },
+    {
+      id: 'act-theme',
+      group: 'Actions',
+      label: 'Toggle theme',
+      icon: <Sun size={16} aria-hidden="true" />,
+      keywords: 'dark light appearance',
+      run: () =>
+        run(() =>
+          manager.updateSettings({
+            ...snapshot.settings,
+            theme: document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark',
+          }),
+        ),
+    },
+    ...jobs.map((job) => {
+      const Icon = categoryIcons[job.category];
+      return {
+        id: `job-${job.id}`,
+        group: 'Downloads' as const,
+        label: job.filename,
+        hint: `${stateLabel(job.state)} · ${hostname(job.url)}`,
+        icon: <Icon size={16} aria-hidden="true" />,
+        run: () => setSelected(job.id),
+      };
+    }),
+  ];
+  const summary = [
+    `${jobs.length} ${jobs.length === 1 ? 'file' : 'files'}`,
+    jobs.length ? `${bytes(jobs.reduce((n, j) => n + (j.total || j.downloaded), 0))} total` : '',
+    `${active.length} active`,
+    jobs.some((j) => j.state === 'QUEUED')
+      ? `${jobs.filter((j) => j.state === 'QUEUED').length} queued`
+      : '',
+    jobs.some((j) => j.state === 'FAILED')
+      ? `${jobs.filter((j) => j.state === 'FAILED').length} failed`
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const nextHour = () => {
     const at = new Date(Date.now() + 3600000);
     at.setMinutes(0, 0, 0);
@@ -645,23 +779,34 @@ export function App() {
             flux<span className="brand-dot">.</span>
           </span>
         </a>
-        <p className="sidebar-caption">WORKSPACE</p>
+        <p className="sidebar-caption">Downloads</p>
         <nav aria-label="Main navigation">
-          {navigation.map(({ id, label, Icon }) => (
+          {navigation.map(({ id, label, Icon, tone }) => (
             <button
               key={id}
               className={`nav-item ${view === id ? 'selected' : ''}`}
               onClick={() => changeView(id)}
             >
-              <Icon size={18} />
+              {tone ? (
+                <span className="nav-dot" aria-hidden="true">
+                  <span className={`ds-dot ${tone}`} />
+                </span>
+              ) : (
+                <Icon size={16} />
+              )}
               <span>{label}</span>
-              <span className="nav-count">{jobs.filter((j) => matches(j, id)).length}</span>
+              {(id === 'all' || jobs.some((j) => matches(j, id))) && (
+                <span className="nav-count">{jobs.filter((j) => matches(j, id)).length}</span>
+              )}
             </button>
           ))}
         </nav>
         {snapshot.settings.categories && (
-          <>
-            <p className="sidebar-caption category-caption">FILE CATEGORIES</p>
+          <details className="sidebar-group" open>
+            <summary className="sidebar-caption category-caption">
+              File types
+              <ChevronRight size={14} aria-hidden="true" />
+            </summary>
             <nav aria-label="File categories">
               {(Object.entries(categoryIcons) as [Category, typeof File][]).map(
                 ([category, Icon]) => (
@@ -670,7 +815,7 @@ export function App() {
                     className={`nav-item category-nav ${view === category ? 'selected' : ''}`}
                     onClick={() => changeView(category)}
                   >
-                    <Icon size={17} />
+                    <Icon size={16} />
                     <span>{category}</span>
                     {jobs.some((j) => j.category === category) && (
                       <span className="nav-count">
@@ -681,29 +826,22 @@ export function App() {
                 ),
               )}
             </nav>
-          </>
+          </details>
         )}
         <div className="sidebar-bottom">
-          <div className="local-card">
-            <ShieldCheck size={19} />
-            <div>
-              <strong>Local by design</strong>
-              <span>Your files stay on your device.</span>
-            </div>
-          </div>
           <button
             className={`nav-item ${view === 'settings' ? 'selected' : ''}`}
             onClick={() => changeView('settings')}
           >
-            <Settings2 size={18} />
+            <Settings2 size={16} />
             <span>Settings</span>
           </button>
-          <div className="sidebar-version">
-            <span>Flux for Chrome</span>
-            <span>
-              v{chrome.runtime.getManifest().version_name ?? chrome.runtime.getManifest().version}
-            </span>
+          <div className="sidebar-engine">
+            <span className="ds-dot is-live" aria-hidden="true" />
+            Local engine
+            <span>{active.length ? `${active.length} active` : 'Idle'}</span>
           </div>
+
           <p className="sidebar-credit">
             created by <strong>Vexor</strong>
           </p>
@@ -712,33 +850,40 @@ export function App() {
       <main className="main">
         <header className="topbar">
           <button
-            className="icon-button mobile-menu"
+            className="ds-icon-btn mobile-menu"
             onClick={() => setMobileNav(!mobileNav)}
             aria-label="Toggle navigation"
           >
-            <LayoutGrid size={19} />
+            <LayoutGrid size={16} />
           </button>
-          <label className="global-search">
-            <Search size={17} />
-            <input
-              ref={globalSearch}
-              aria-label="Global search"
-              placeholder="Search downloads, files, or folders…"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                if (view === 'settings') changeView('all');
-              }}
-            />
-            <kbd>Ctrl</kbd>
-            <kbd>K</kbd>
-          </label>
+          <nav className="topbar-crumbs" aria-label="Breadcrumb">
+            {view !== 'settings' && (
+              <>
+                <span>
+                  {['all', 'active', 'queued', 'completed', 'failed'].includes(view)
+                    ? 'Downloads'
+                    : 'File types'}
+                </span>
+                <ChevronRight size={14} aria-hidden="true" />
+              </>
+            )}
+            <strong>{view === 'settings' ? 'Settings' : title}</strong>
+          </nav>
           <div className="topbar-right">
-            <span className="local-indicator">
-              <i /> Local engine
-            </span>
             <button
-              className="icon-button"
+              className="topbar-search"
+              onClick={() => setPalette(true)}
+              aria-label="Search and quick access"
+              aria-keyshortcuts="/"
+            >
+              <Search size={16} aria-hidden="true" />
+              <span>Search</span>
+              <span className="topbar-keys" aria-hidden="true">
+                <kbd>/</kbd>
+              </span>
+            </button>
+            <button
+              className="ds-icon-btn"
               title="Toggle theme"
               aria-label="Toggle theme"
               onClick={() =>
@@ -750,16 +895,11 @@ export function App() {
                 )
               }
             >
-              {snapshot.settings.theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+              {snapshot.settings.theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
             </button>
           </div>
         </header>
-        <div className="main-content">
-          <nav className="breadcrumb" aria-label="Breadcrumb">
-            <span>Workspace</span>
-            <ChevronRight size={14} />
-            <strong>{view === 'settings' ? 'Settings' : title}</strong>
-          </nav>
+        <div className={`main-content ${view === 'settings' ? '' : 'fit-page'}`}>
           {savedToast && (
             <div className="ds-toast" role="status">
               <CircleCheck size={16} aria-hidden="true" />
@@ -789,48 +929,36 @@ export function App() {
               </button>
             </div>
           )}
-          {!(bannerHidden && snapshot.settings.interception && captureAccess) && (
-            <section className="ds-alert is-spaced" aria-label="Automatic download capture">
-              <ShieldCheck size={16} aria-hidden="true" />
-              <div className="ds-alert-body">
-                <strong>
-                  {snapshot.settings.interception && captureAccess
-                    ? 'Automatic capture is on'
-                    : 'Let Flux handle your downloads'}
-                </strong>
-                <p>
-                  {snapshot.settings.interception && captureAccess
-                    ? 'Eligible downloads start in Flux. Files that require the original browser request stay with Chrome.'
-                    : 'Enable automatic capture and approve website access so clicking a file starts Flux instead of Chrome’s default downloader.'}
-                </p>
-              </div>
-              <div className="ds-alert-actions">
-                {(!snapshot.settings.interception || !captureAccess) && (
+          {view !== 'settings' &&
+            !(snapshot.settings.interception && captureAccess) &&
+            !captureDismissed && (
+              <section className="ds-alert is-spaced" aria-label="Automatic download capture">
+                <ShieldCheck size={16} aria-hidden="true" />
+                <div className="ds-alert-body">
+                  <strong>Let Flux handle your downloads</strong>
+                  <p>
+                    Enable automatic capture and approve website access so clicking a file starts
+                    Flux instead of Chrome’s default downloader.
+                  </p>
+                </div>
+                <div className="ds-alert-actions">
                   <button
-                    className="ds-btn is-primary is-small"
+                    className="ds-btn is-outline is-small"
                     onClick={() => run(() => manager.enableAutomaticCapture())}
                   >
                     Enable automatic downloads
                   </button>
-                )}
-                {snapshot.settings.interception && captureAccess && (
                   <button
                     className="ds-icon-btn is-small"
                     aria-label="Dismiss banner"
-                    onClick={() => setBannerHidden(true)}
+                    onClick={dismissCapture}
                   >
                     <X size={16} />
                   </button>
-                )}
-              </div>
-            </section>
-          )}
-          <SaveSetup
-            snapshot={snapshot}
-            manager={manager}
-            run={run}
-            onSettings={() => changeView('settings')}
-          />
+                </div>
+              </section>
+            )}
+          {view !== 'settings' && <SaveSetup snapshot={snapshot} manager={manager} run={run} />}
           {offers.length > 0 && (
             <section
               className="native-offers"
@@ -884,59 +1012,65 @@ export function App() {
             <>
               <div className="page-heading">
                 <div>
-                  <div className="eyebrow">YOUR DOWNLOAD WORKSPACE</div>
                   <h1>
                     {title}
                     <span className="heading-dot">.</span>
                   </h1>
-                  <p>Everything you download, beautifully under control.</p>
+                  <p>{summary}</p>
                 </div>
                 <button
-                  className="button primary"
+                  className="ds-btn is-primary"
                   onClick={() => {
                     setInitialUrl('');
                     setAdd(true);
                   }}
                 >
-                  <Plus size={18} /> Add download
-                  <ChevronDown size={17} className="button-chevron" />
+                  <Plus size={16} /> Add download
                 </button>
               </div>
               <div className="workspace-actions" aria-label="Download tools">
-                <button
-                  className="button secondary"
-                  onClick={() => run(() => manager.chooseDownloadFolder())}
-                >
-                  <FolderOpen size={17} />
-                  {snapshot.destination
-                    ? `Folder: ${snapshot.destination.name}`
-                    : 'Choose download folder'}
-                </button>
-                <button className="button secondary" onClick={() => setBatch('')}>
-                  <Link2 size={17} /> Add multiple links
-                </button>
-                <button className="button secondary" onClick={() => setQueuesOpen(true)}>
-                  <Layers size={17} /> Manage queues
-                </button>
-                <button
-                  className="button secondary"
-                  disabled={mediaBusy}
-                  onClick={() => void grabLinks()}
-                >
-                  <FileText size={17} /> Grab page links
-                </button>
-                <button className="button secondary" onClick={() => setCrawler(true)}>
-                  <Link2 size={17} /> Crawl website
-                </button>
-                <button
-                  className="button secondary"
-                  disabled={!jobs.length}
-                  onClick={() =>
-                    run(() => exportDownloadList(selectedJobs.length ? selectedJobs : jobs))
-                  }
-                >
-                  <Upload size={17} /> Export link list
-                </button>
+                <div className="tool-group is-joined" role="group" aria-label="Add links">
+                  <button className="ds-btn is-outline is-small" onClick={() => setBatch('')}>
+                    <Link2 size={16} /> Add multiple links
+                  </button>
+                </div>
+                <div className="tool-group is-end" role="group" aria-label="Manage">
+                  <button
+                    className="ds-icon-btn"
+                    title="Manage queues"
+                    aria-label="Manage queues"
+                    onClick={() => setQueuesOpen(true)}
+                  >
+                    <Layers size={16} />
+                  </button>
+                  <button
+                    className="ds-icon-btn"
+                    title={
+                      snapshot.destination
+                        ? 'Folder: ' + snapshot.destination.name
+                        : 'Choose download folder'
+                    }
+                    aria-label={
+                      snapshot.destination
+                        ? 'Folder: ' + snapshot.destination.name
+                        : 'Choose download folder'
+                    }
+                    onClick={() => run(() => manager.chooseDownloadFolder())}
+                  >
+                    <FolderOpen size={16} />
+                  </button>
+                  <button
+                    className="ds-icon-btn"
+                    title="Export link list"
+                    aria-label="Export link list"
+                    disabled={!jobs.length}
+                    onClick={() =>
+                      run(() => exportDownloadList(selectedJobs.length ? selectedJobs : jobs))
+                    }
+                  >
+                    <Upload size={16} />
+                  </button>
+                </div>
               </div>
               <section className="stats-grid" aria-label="Transfer statistics">
                 <div className="stat-card">
@@ -962,7 +1096,7 @@ export function App() {
                     <Clock3 size={17} />
                   </div>
                   <div className="stat-value">
-                    {active.length.toString().padStart(2, '0')}
+                    {active.length}
                     <small>downloads</small>
                   </div>
                   <span className="stat-foot">
@@ -978,7 +1112,7 @@ export function App() {
                     <CircleCheckBig size={17} />
                   </div>
                   <div className="stat-value">
-                    {completed.length.toString().padStart(2, '0')}
+                    {completed.length}
                     <small>files</small>
                   </div>
                   <span className="stat-foot">
@@ -1035,14 +1169,14 @@ export function App() {
                   <div className="toolbar">
                     <DisplayOptions {...display} />
                     <button
-                      className="button secondary tool"
+                      className="ds-btn is-outline is-small"
                       onClick={() => run(() => manager.pauseAll())}
                       disabled={!active.length && !jobs.some((job) => job.queueRetryAt != null)}
                     >
-                      <Pause size={15} /> Pause all
+                      <Pause size={16} /> Pause all
                     </button>
                     <button
-                      className="button secondary tool"
+                      className="ds-btn is-outline is-small"
                       onClick={() => run(() => manager.resumeAll())}
                       disabled={
                         !jobs.some((j) =>
@@ -1050,26 +1184,13 @@ export function App() {
                         )
                       }
                     >
-                      <Play size={15} /> Resume all
-                    </button>
-                    <button
-                      className="icon-button"
-                      title="Find direct media in the active web page"
-                      aria-label="Find media in active tab"
-                      onClick={() => void detect()}
-                      disabled={mediaBusy}
-                    >
-                      {mediaBusy ? (
-                        <LoaderCircle size={17} className="spin" />
-                      ) : (
-                        <Radio size={17} />
-                      )}
+                      <Play size={16} /> Resume all
                     </button>
                   </div>
                 </div>
                 <div className="list-controls">
                   <label className="search-box">
-                    <Search size={17} />
+                    <Search size={16} />
                     <input
                       placeholder="Search downloads…"
                       aria-label="Search downloads"
@@ -1078,7 +1199,7 @@ export function App() {
                     />
                     {search && (
                       <button
-                        className="icon-button"
+                        className="ds-icon-btn is-small"
                         aria-label="Clear search"
                         onClick={() => setSearch('')}
                       >
@@ -1087,62 +1208,56 @@ export function App() {
                     )}
                   </label>
                   <div className="filter-controls">
-                    <label className="select-control">
-                      <select
-                        aria-label="Filter by queue"
-                        value={queueFilter}
-                        onChange={(event) => setQueueFilter(event.target.value)}
-                      >
-                        <option value="all">All queues</option>
-                        <option value="default">Default queue</option>
-                        {snapshot.settings.queues.map((queue) => (
-                          <option key={queue.id} value={queue.id}>
-                            {queue.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="select-control">
-                      <ListFilter size={15} />
-                      <select
-                        value={statusFilter}
-                        onChange={(event) => setStatusFilter(event.target.value)}
-                        aria-label="Filter by status"
-                      >
-                        <option value="all">All statuses</option>
-                        {[
-                          'DOWNLOADING',
-                          'QUEUED',
-                          'PAUSED',
-                          'ASSEMBLING',
-                          'COMPLETED',
-                          'FAILED',
-                          'CANCELED',
-                        ].map((state) => (
-                          <option key={state} value={state}>
-                            {stateLabel(state)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="select-control">
-                      <SlidersHorizontal size={15} />
-                      <select
-                        value={sort}
-                        onChange={(event) => setSort(event.target.value)}
-                        aria-label="Sort downloads"
-                      >
-                        <option value="newest">Newest first</option>
-                        <option value="name">Name</option>
-                        <option value="size">File size</option>
-                        <option value="priority">Priority & queue</option>
-                      </select>
-                    </label>
+                    <Select
+                      aria-label="Filter by queue"
+                      value={queueFilter}
+                      onChange={(event) => setQueueFilter(event.target.value)}
+                    >
+                      <option value="all">All queues</option>
+                      <option value="default">Default queue</option>
+                      {snapshot.settings.queues.map((queue) => (
+                        <option key={queue.id} value={queue.id}>
+                          {queue.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      icon={<ListFilter size={16} />}
+                      aria-label="Filter by status"
+                      value={statusFilter}
+                      onChange={(event) => setStatusFilter(event.target.value)}
+                    >
+                      <option value="all">All statuses</option>
+                      {[
+                        'DOWNLOADING',
+                        'QUEUED',
+                        'PAUSED',
+                        'ASSEMBLING',
+                        'COMPLETED',
+                        'FAILED',
+                        'CANCELED',
+                      ].map((state) => (
+                        <option key={state} value={state}>
+                          {stateLabel(state)}
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      icon={<SlidersHorizontal size={16} />}
+                      aria-label="Sort downloads"
+                      value={sort}
+                      onChange={(event) => setSort(event.target.value)}
+                    >
+                      <option value="newest">Newest first</option>
+                      <option value="name">Name</option>
+                      <option value="size">File size</option>
+                      <option value="priority">Priority & queue</option>
+                    </Select>
                   </div>
                 </div>
                 {!!visible.length && (
                   <div className="bulk-toolbar" aria-label="Selected downloads">
-                    <label className="checkbox-label">
+                    <label className="bulk-select-all">
                       <input
                         type="checkbox"
                         aria-label="Select all visible downloads"
@@ -1150,72 +1265,97 @@ export function App() {
                         onChange={(event) =>
                           event.target.checked ? selectAll() : setSelection(new Set())
                         }
-                      />{' '}
-                      {selectedJobs.length} selected
+                      />
+                      <span>{selectedJobs.length} selected</span>
                     </label>
                     {!!selectedJobs.length && (
                       <>
-                        <button className="text-button" onClick={() => bulk('pause')}>
-                          Pause selected
-                        </button>
-                        <button className="text-button" onClick={() => bulk('resume')}>
-                          Resume selected
-                        </button>
-                        <button className="text-button" onClick={() => bulk('cancel')}>
-                          Cancel selected
-                        </button>
-                        <button className="text-button danger-text" onClick={() => bulk('remove')}>
-                          Remove selected
-                        </button>
                         <span className="bulk-divider" />
-                        <button className="text-button" onClick={() => bulk('start')}>
-                          <Play size={14} /> Start now
-                        </button>
-                        <select
-                          className="bulk-select"
-                          aria-label="Move selected to queue"
-                          value=""
-                          onChange={(event) =>
-                            event.target.value === 'new'
-                              ? setQueuesOpen(true)
-                              : moveToQueue(event.target.value)
-                          }
-                        >
-                          <option value="" disabled>
-                            Move to queue…
-                          </option>
-                          <option value="default">Default queue</option>
-                          {snapshot.settings.queues.map((queue) => (
-                            <option key={queue.id} value={queue.id}>
-                              {queue.name}
-                            </option>
-                          ))}
-                          <option value="new">+ New queue…</option>
-                        </select>
-                        {bulkTime === null ? (
-                          <button className="text-button" onClick={() => setBulkTime(nextHour())}>
-                            <Clock3 size={14} /> Start at…
+                        <div className="bulk-actions" role="group" aria-label="Selected actions">
+                          <button
+                            className="ds-btn is-ghost is-small"
+                            onClick={() => bulk('start')}
+                          >
+                            <Play size={16} /> Start now
                           </button>
-                        ) : (
-                          <span className="bulk-time">
-                            <input
-                              type="datetime-local"
-                              aria-label="Start selected at"
-                              value={bulkTime}
-                              onChange={(event) => setBulkTime(event.target.value)}
-                            />
+                          <button
+                            className="ds-btn is-ghost is-small"
+                            onClick={() => bulk('pause')}
+                          >
+                            <Pause size={16} /> Pause selected
+                          </button>
+                          <button
+                            className="ds-btn is-ghost is-small"
+                            onClick={() => bulk('resume')}
+                          >
+                            <RefreshCw size={16} /> Resume selected
+                          </button>
+                          <button
+                            className="ds-btn is-ghost is-small"
+                            onClick={() => bulk('cancel')}
+                          >
+                            <X size={16} /> Cancel selected
+                          </button>
+                        </div>
+                        <span className="bulk-divider" />
+                        <div className="bulk-actions" role="group" aria-label="Queue and schedule">
+                          <Select
+                            size="sm"
+                            aria-label="Move selected to queue"
+                            value=""
+                            onChange={(event) =>
+                              event.target.value === 'new'
+                                ? setQueuesOpen(true)
+                                : moveToQueue(event.target.value)
+                            }
+                          >
+                            <option value="" disabled>
+                              Move to queue
+                            </option>
+                            <option value="default">Default queue</option>
+                            {snapshot.settings.queues.map((queue) => (
+                              <option key={queue.id} value={queue.id}>
+                                {queue.name}
+                              </option>
+                            ))}
+                            <option value="new">New queue</option>
+                          </Select>
+                          {bulkTime === null ? (
                             <button
-                              className="button primary small"
-                              disabled={!bulkTime}
-                              onClick={() => scheduleSelected(new Date(bulkTime).getTime())}
+                              className="ds-btn is-outline is-small"
+                              onClick={() => setBulkTime(nextHour())}
                             >
-                              Set
+                              <Clock3 size={16} /> Start at
                             </button>
-                            <button className="text-button" onClick={() => setBulkTime(null)}>
-                              Cancel
-                            </button>
-                          </span>
-                        )}
+                          ) : (
+                            <span className="bulk-time">
+                              <DateTimePicker
+                                aria-label="Start selected at"
+                                value={bulkTime}
+                                onChange={setBulkTime}
+                              />
+                              <button
+                                className="ds-btn is-outline is-small"
+                                disabled={!bulkTime}
+                                onClick={() => scheduleSelected(new Date(bulkTime).getTime())}
+                              >
+                                Set
+                              </button>
+                              <button
+                                className="ds-btn is-ghost is-small"
+                                onClick={() => setBulkTime(null)}
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          className="ds-btn is-ghost is-danger is-small bulk-remove"
+                          onClick={() => bulk('remove')}
+                        >
+                          <Trash2 size={16} /> Remove selected
+                        </button>
                       </>
                     )}
                   </div>
@@ -1266,7 +1406,7 @@ export function App() {
                       </p>
                       {!search && statusFilter === 'all' && (
                         <button
-                          className="button secondary"
+                          className="ds-btn is-outline"
                           onClick={() => {
                             setInitialUrl('');
                             setAdd(true);
@@ -1279,16 +1419,11 @@ export function App() {
                   )}
                 </div>
               </section>
-              <div className="workspace-note">
-                <span>
-                  <ShieldCheck size={14} /> Private. Local. No account required.
-                </span>
-                <span>Keep this tab open while transfers are running.</span>
-              </div>
             </>
           )}
         </div>
       </main>
+      {palette && <CommandPalette items={paletteItems} onClose={() => setPalette(false)} />}
       {add && (
         <AddDownload
           key={initialUrl}
@@ -1306,75 +1441,10 @@ export function App() {
       {batch !== null && (
         <BatchDownloads manager={manager} initialText={batch} onClose={() => setBatch(null)} />
       )}
-      {crawler && (
-        <CrawlSite
-          manager={manager}
-          onClose={() => setCrawler(false)}
-          onReview={(text, sessionOrigin) => {
-            setCrawler(false);
-            setCrawlBatch({ text, sessionOrigin });
-          }}
-        />
-      )}
-      {crawlBatch && (
-        <BatchDownloads
-          manager={manager}
-          initialText={crawlBatch.text}
-          sessionOrigin={crawlBatch.sessionOrigin}
-          onClose={() => setCrawlBatch(null)}
-        />
-      )}
       {queuesOpen && <Queues manager={manager} onClose={() => setQueuesOpen(false)} />}
       {selectedJob && (
         <Details job={selectedJob} manager={manager} onClose={() => setSelected(null)} run={run} />
       )}{' '}
-      {media && (
-        <Modal title="Media on this page" onClose={() => setMedia(null)}>
-          <div className="form-stack media-list">
-            <p className="muted">
-              Direct media files and HLS playlists found in this page. Review an HLS rendition
-              before downloading. DRM is unsupported.
-            </p>
-            {media.length ? (
-              media.map((item, index) => (
-                <div className="media-item" key={`${item.url}-${index}`}>
-                  <div>
-                    <strong>{item.filename}</strong>
-                    <small>{hostname(item.url)}</small>
-                  </div>
-                  <button
-                    className="button secondary"
-                    onClick={() =>
-                      run(async () => {
-                        if (item.media) {
-                          setInitialUrl(item.url);
-                          setInitialMedia(item.media);
-                          setMedia(null);
-                          setAdd(true);
-                          return;
-                        }
-                        await manager.add(item);
-                        setMedia((items) => items?.filter((value) => value !== item) ?? []);
-                      })
-                    }
-                  >
-                    <Plus size={15} /> {item.media ? 'Review ' + item.media.toUpperCase() : 'Add'}
-                  </button>
-                </div>
-              ))
-            ) : (
-              <div className="empty-state compact">
-                <Video size={28} />
-                <h3>No media found</h3>
-                <p>
-                  Play a video on the website, then try again. You can also paste a playlist URL in
-                  Add download.
-                </p>
-              </div>
-            )}
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }

@@ -250,34 +250,6 @@ export async function startFixture() {
       res.writeHead(503, { 'Retry-After': '0' }).end();
       return;
     }
-    if (route === '/robots.txt') {
-      res
-        .writeHead(200, { 'Content-Type': 'text/plain' })
-        .end('User-agent: Flux\nDisallow: /crawl/private/\nAllow: /crawl/private/allowed.html\n');
-      return;
-    }
-    if (route.startsWith('/crawl/') && route.endsWith('.html')) {
-      if (route === '/crawl/redirect.html') {
-        res
-          .writeHead(302, {
-            Location: `http://cdn.example.com:${(server.address() as { port: number }).port}/crawl/escaped.html`,
-          })
-          .end();
-        return;
-      }
-      const contents: Record<string, string> = {
-        '/crawl/index.html': `<base href="/crawl/"><a href="next.html">Next</a><a href="archive.zip?size=131072" download="crawl-archive.zip">Archive</a><a href="plain.zip?size=131072">Plain archive</a><a href="private/blocked.html">Private</a><a href="private/allowed.html">Allowed</a><a href="nofollow.html" rel="nofollow">No follow</a><a href="redirect.html">Off-site redirect</a><a href="http://cdn.example.com:${(server.address() as { port: number }).port}/external.zip">External</a><img src="http://127.0.0.2/internal.png"><script src="script.js"></script><script>throw new Error('Crawler executed page code');</script>`,
-        '/crawl/next.html':
-          '<a href="index.html#again">Cycle</a><a href="deep/end.html">Deep page</a><img src="picture.png"><a href="child.pdf?size=131072">PDF</a>',
-        '/crawl/deep/end.html': '<a href="final.bin?size=131072">Final file</a>',
-        '/crawl/private/allowed.html': '<p>Allowed by the longest robots rule.</p>',
-        '/crawl/oversized.html': '<p>' + 'x'.repeat(2 * 1024 * 1024) + '</p>',
-      };
-      res
-        .writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-        .end(contents[route] ?? '<p>Not expected to be crawled.</p>');
-      return;
-    }
     if (route.startsWith('/hls/')) {
       let bytes = media.get(route.slice(5));
       const liveKey = url.searchParams.get('dashLive');

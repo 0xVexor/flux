@@ -1,7 +1,6 @@
 import type { NewDownload, Settings, DownloadJob, Snapshot, DownloadQueue } from '../domain/model';
 import type { HlsReview } from '../engine/media/types';
 import type { DashReview, DashSelection } from '../engine/media/dash';
-import type { CrawlOptions, CrawlProgress, CrawlResult } from '../engine/crawl/site';
 export type Action =
   | 'finish-recording'
   | 'pause'
@@ -35,13 +34,6 @@ export interface ManagerAPI {
   replaceSource(id: string, url: string): Promise<void>;
   saveQueue(queue: DownloadQueue): Promise<void>;
   removeQueue(id: string): Promise<void>;
-  discoverLinks(): Promise<{ url: string; filename: string }[]>;
-  crawlSite(
-    url: string,
-    options: CrawlOptions,
-    signal?: AbortSignal,
-    progress?: (value: CrawlProgress) => void,
-  ): Promise<CrawlResult>;
   action(id: string, action: Action): Promise<void>;
   pauseAll(): Promise<void>;
   resumeAll(): Promise<void>;
@@ -72,5 +64,4 @@ export interface ManagerAPI {
   clearHistory(): Promise<void>;
   cleanup(): Promise<void>;
   requestPersistence(): Promise<boolean>;
-  detectMedia(): Promise<{ url: string; filename: string; media?: 'hls' | 'dash' }[]>;
 }

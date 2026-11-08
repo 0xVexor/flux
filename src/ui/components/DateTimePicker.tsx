@@ -1,5 +1,7 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from 'react';
+import { createPortal } from 'react-dom';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { inPopup } from './popup-room';
 import '../ds.css';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
@@ -44,7 +46,9 @@ export function DateTimePicker({
     const base = parsed?.date ?? new Date();
     return new Date(base.getFullYear(), base.getMonth(), 1);
   });
+  const [place, setPlace] = useState<{ left: number; top?: number; bottom?: number; maxHeight: number } | null>(null);
   const box = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const today = useMemo(() => {
     const now = new Date();
@@ -54,16 +58,29 @@ export function DateTimePicker({
   useEffect(() => {
     if (!open) return;
     const close = (event: PointerEvent) => {
-      if (!box.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (!box.current?.contains(target) && !panel.current?.contains(target)) setOpen(false);
+    };
+    // A floating calendar is placed once; if the window changes under it, close it.
+    const away = (event: Event) => {
+      if (!panel.current?.contains(event.target as Node)) setOpen(false);
     };
     document.addEventListener('pointerdown', close);
-    return () => document.removeEventListener('pointerdown', close);
+    window.addEventListener('resize', away);
+    window.addEventListener('scroll', away, true);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      window.removeEventListener('resize', away);
+      window.removeEventListener('scroll', away, true);
+    };
   }, [open]);
 
-  // The popup window stops growing at 600 px, so scroll the calendar fully into view.
+  // The toolbar popup cannot draw outside its window (600 px at most), so there the calendar
+  // opens inline and is scrolled into view. Everywhere else it floats over the page.
+  const inline = typeof document === 'undefined' || inPopup();
   useEffect(() => {
-    if (open) panel.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [open]);
+    if (open && inline) panel.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [open, inline]);
 
   function emit(date: Date, time: string) {
     const next = `${dayKey(date)}T${time}`;
@@ -74,6 +91,19 @@ export function DateTimePicker({
     if (disabled) return;
     const base = parsed?.date ?? new Date();
     setMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+    const rect = trigger.current?.getBoundingClientRect();
+    if (rect && !inline) {
+      const wanted = 400;
+      const below = window.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const flip = below < Math.min(wanted, 320) && above > below;
+      const room = Math.max(200, Math.min(wanted, flip ? above : below));
+      setPlace({
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - 296 - 8)),
+        maxHeight: room,
+        ...(flip ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }),
+      });
+    }
     setOpen(true);
   }
   function keys(event: KeyboardEvent<HTMLElement>) {
@@ -107,12 +137,16 @@ export function DateTimePicker({
     month,
   );
 
+  const wrap = (node: ReactElement) =>
+    inline ? node : createPortal(node, trigger.current?.closest('dialog') ?? document.body);
+
   return (
     <div className="ds-select ds-datepicker" ref={box} onKeyDown={keys}>
       {name && <input type="hidden" name={name} value={current} />}
       <button
         type="button"
         id={id}
+        ref={trigger}
         className="ds-select-trigger"
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -126,10 +160,12 @@ export function DateTimePicker({
           {label || 'Pick date and time'}
         </span>
       </button>
-      {open && (
+      {open && (inline || place) &&
+        wrap(
         <div
           ref={panel}
-          className="ds-datepicker-panel"
+          className={`ds-datepicker-panel${inline ? '' : ' is-floating'}`}
+          style={inline || !place ? undefined : place}
           id={`${generated}-panel`}
           role="dialog"
           aria-label="Choose date and time"
@@ -196,8 +232,8 @@ export function DateTimePicker({
               }}
             />
           </div>
-        </div>
-      )}
+        </div>,
+        )}
     </div>
   );
 }

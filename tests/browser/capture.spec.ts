@@ -3,7 +3,7 @@ import { cp, mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { chooseByText } from './select';
+import { choose, chooseByText } from './select';
 import { startFixture, fixtureHash } from '../fixtures/server';
 import type { Snapshot, DownloadJob } from '../../src/domain/model';
 let fixture: Awaited<ReturnType<typeof startFixture>>,
@@ -437,22 +437,11 @@ test('named queues, batch link review and expired address refresh control real e
   expect(resumed.id).toBe(original.id);
 });
 
-test('page link discovery, clipboard/drop review, selected actions and exported lists use real jobs', async () => {
+test('pasted links, clipboard/drop review, selected actions and exported lists use real jobs', async () => {
   const grabbed = `${base}/grabbed.zip?size=131072`;
-  await site.evaluate((url) => {
-    const link = document.createElement('a');
-    link.href = url;
-    link.textContent = 'Grabbed file';
-    document.body.append(link);
-    const privateLink = document.createElement('a');
-    privateLink.href = 'http://127.0.0.1/private.zip';
-    document.body.append(privateLink);
-  }, grabbed);
-  await manager.getByRole('button', { name: 'Grab page links', exact: true }).click();
+  await manager.getByRole('button', { name: 'Add multiple links', exact: true }).click();
+  await manager.getByLabel('Download links', { exact: true }).fill(grabbed);
   await expect(manager.getByLabel('Download links', { exact: true })).toContainText('grabbed.zip');
-  await expect(manager.getByLabel('Download links', { exact: true })).not.toContainText(
-    '127.0.0.1',
-  );
   await manager.getByLabel('Filter links', { exact: true }).fill('grabbed.zip');
   await manager.getByLabel('Add paused', { exact: true }).check();
   await manager.getByRole('button', { name: 'Add selected downloads', exact: true }).click();
@@ -644,8 +633,8 @@ test('trusted blob and data download links retain their bytes and filenames with
   await expect(manager.getByText('Preferences saved')).toBeVisible();
   await manager.getByRole('button', { name: /^All downloads/ }).click();
   await manager.getByLabel('Search downloads').fill('');
-  await manager.getByLabel('Filter by queue').selectOption('all');
-  await manager.getByLabel('Filter by status').selectOption('all');
+  await choose(manager, 'Filter by queue', 'all');
+  await choose(manager, 'Filter by status', 'all');
   const cdp = await context.browser()!.newBrowserCDPSession();
   await cdp.send('Browser.setDownloadBehavior', { behavior: 'default', eventsEnabled: true });
   await cdp.detach();

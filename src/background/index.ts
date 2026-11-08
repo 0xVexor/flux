@@ -14,6 +14,7 @@ import {
   type PageTransferGrant,
 } from '../application/page-transfer';
 import { nextQueueBoundary, queueAvailable } from '../application/queue';
+import { allQueues, newQueueId } from '../domain/queues';
 import { RequestLedger } from './request-ledger';
 import { captureOrigins, eligibleLink, excludedHost } from '../shared/capture';
 import { probe, HttpError } from '../engine/network/http';
@@ -552,7 +553,7 @@ async function routeCaptured(jobs: DownloadJob[], count = jobs.length) {
   }
   await releaseJobs(
     held.map((job) => job.id),
-    'default',
+    newQueueId(await repository.getSettings()),
     'now',
   );
   await announce(count);
@@ -736,8 +737,9 @@ chrome.runtime.onStartup.addListener(() => {
       .map((j) => j.scheduledAt!);
     // Scheduled queues with waiting files must also fire after a browser restart.
     const settings = await repository.getSettings();
-    for (const queue of settings.queues) {
-      if (!jobs.some((job) => job.queueId === queue.id && job.state === 'QUEUED')) continue;
+    for (const queue of allQueues(settings)) {
+      if (!jobs.some((job) => (job.queueId ?? 'default') === queue.id && job.state === 'QUEUED'))
+        continue;
       const at = queueAvailable(queue) ? Date.now() : nextQueueBoundary(queue);
       if (at != null) pending.push(at);
     }
@@ -1519,72 +1521,6 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       () => respond({ ok: true }),
       (e) => respond({ error: safeError(e) }),
     );
-    return true;
-  }
-  if (message.type === 'detect-media' || message.type === 'discover-links') {
-    void (async () => {
-      // The manager is often active; inspect the most recent ordinary web tab.
-      const tabs = (await chrome.tabs.query({ currentWindow: true })).filter(
-        (tab) => tab.url && /^https?:/.test(tab.url),
-      );
-      const tab = tabs.sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0))[0];
-      if (!tab?.id)
-        throw new Error('Select a web page and open Flux from its toolbar popup first.');
-      const result = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        args: [message.type === 'discover-links'],
-        func: (includeLinks: boolean) => {
-          const isPlaylist = (value: string) => {
-            try {
-              return /\.(?:m3u8?|mpd)$/i.test(new URL(value).pathname);
-            } catch {
-              return false;
-            }
-          };
-          return Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))
-            .slice(0, 2000)
-            .map((anchor) => anchor.href)
-            .filter((url) => includeLinks || isPlaylist(url))
-            .concat(
-              Array.from(document.querySelectorAll<HTMLMediaElement>('video,audio'))
-                .slice(0, 2000)
-                .flatMap((el) => [
-                  el.currentSrc,
-                  el.src,
-                  ...Array.from(el.querySelectorAll('source')).map((s) => s.src),
-                ])
-                .filter(Boolean),
-            )
-            .concat(
-              performance
-                .getEntriesByType('resource')
-                .slice(-2000)
-                .map((entry) => entry.name)
-                .filter(isPlaylist),
-            );
-        },
-      });
-      return {
-        items: [...new Set(result.flatMap((r) => r.result ?? []))].flatMap((url) => {
-          try {
-            const parsed = validateUrl(url);
-            return [
-              {
-                url: parsed.href,
-                filename: parsed.pathname.split('/').pop() ?? 'media',
-                ...(message.type === 'detect-media' && /\.(?:m3u8?|mpd)$/i.test(parsed.pathname)
-                  ? {
-                      media: /\.mpd$/i.test(parsed.pathname) ? ('dash' as const) : ('hls' as const),
-                    }
-                  : {}),
-              },
-            ];
-          } catch {
-            return [];
-          }
-        }),
-      };
-    })().then(respond, (e) => respond({ error: safeError(e) }));
     return true;
   }
 });

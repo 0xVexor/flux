@@ -2,7 +2,7 @@
 
 Flux is a browser-native Chrome MV3 download manager with a real segmented HTTP engine, persistent OPFS staging, automatic saving into a folder you choose, and Save As export. **Version 1.0.0-rc.1 is the local release candidate.** Windows acceptance and remaining release gates are recorded in [the v1 report](docs/release-acceptance-v1.md). Transfers run in the manager tab, or in a hidden extension page while no manager tab is open. No native host, desktop app, account, or remote processing service is required.
 
-This candidate includes DASH, finite live recording, continuous/separate MPEG-TS, compatible discontinuities and bounded site crawling. The historical 0.10 archive and installed extension remain separate; preparing this candidate does not replace an existing installation.
+This candidate includes DASH, finite live recording, continuous/separate MPEG-TS, and compatible discontinuities. The historical 0.10 archive and installed extension remain separate; preparing this candidate does not replace an existing installation.
 
 ## Build and install
 
@@ -49,7 +49,7 @@ Chrome reports native downloads only after they start, so the native handoff can
 
 - **Manage queues** creates named queues with independent start/stop, concurrency, speed limits, selected weekdays, first-start/final-stop dates, and daily/overnight windows. Overnight weekday selection belongs to the opening day. Queues can stop when verified or repeat every 1–10,080 minutes, retaining earlier copies. The global limits still apply. Select a queue when adding files or editing a paused job.
 - **Add multiple links** reviews up to 500 URLs, imports text/JSON lists, expands patterns such as `part[001:010].zip`, filters by filename/host, and skips already-pending URLs. Drop links or paste them outside an input to open the same review.
-- **Grab page links** reads ordinary links/direct media from the most recent accessible web tab, validates public HTTP(S) URLs, and opens the batch review. **Export link list** saves all or selected URLs and metadata; it can include signed URL queries, so store it privately. Imported lists never assert completion or restore unverified byte checkpoints.
+- **Export link list** saves all or selected URLs and metadata; it can include signed URL queries, so store it privately. Imported lists never assert completion or restore unverified byte checkpoints.
 - Select individual rows or all visible rows for bulk pause/resume/cancel/remove. Use **Refresh download address** in a stopped job's details for expired links. Resume re-probes identity; a different final resource URL safely restarts instead of merging unrelated bytes.
 
 The full remaining browser-feasible parity work is tracked in [the IDM/AB capability audit](docs/feature-parity.md).
@@ -58,7 +58,7 @@ Use **View options** above the download list for compact rows and visible transf
 
 ## HLS media
 
-Choose **HLS video / live recording** in Add download, review the playlist, choose/review a quality, then add it. **Find media in active tab** also finds HLS URLs in visible links/media elements and recent resource entries; selecting a playlist opens review rather than saving its text as a video. Discovery is user initiated and cannot guarantee finding every stream.
+Choose **HLS video / live recording** in Add download, review the playlist, choose/review a quality, then add it.
 
 The current supported output is an ordinary MP4 from a completed H.264/AAC rendition with muxed tracks in fragmented MP4 or MPEG-TS parts. Separate video-only and audio-only fragmented MP4 or MPEG-TS renditions can also be joined; review offers audio names/languages and preserves that selection through recovery and queue copies. Clear and ordinary identity AES-128 CBC/PKCS7 HLS are supported. TS parts are limited to 16 MiB each and require supported single-program metadata and video access-unit delimiters. Split PAT/PMT sections are assembled and checked; after an initial keyframe, later parts can begin between keyframes using codec context from verified local initialization. Encoded frames are retained. A packaged child worker converts them with cancellation and processing deadlines. The main worker checks initialization, fragment/sample bounds, relative addressing and decode timelines, normalizes the initial timeline origin and verifies the full file. Source-segment checkpoints commit with job progress. Reopening validates the manifest, stored hashes and remote segment identity before fetching missing parts. Strong validators permit HEAD revalidation; otherwise completed source bytes are compared again. Unknown-size or oversized parts require an adequate allowance; weak-validator resume requires disabling the allowance so verification cannot consume every window.
 
@@ -71,10 +71,6 @@ Declared HLS discontinuities with compatible track/codec/fragment defaults are r
 ## DASH video
 
 Choose **DASH video / live recording**, review an MPD, select video quality and audio/language, review the selected tracks and start. Unprotected H.264/AAC fragmented MP4 supports numbered/time SegmentTemplate, finite SegmentTimeline, SegmentList and direct SIDX-indexed SegmentBase. Static presentations may contain up to 128 contiguous periods with compatible codec/timescale/fragment defaults and stable representation choices. Track presentation offsets and clock resets are normalized without changing encoded samples. Dynamic DASH records one active period from a bounded availability window, including selected separate audio; choose a finite duration or use Finish recording. Its collected plan survives restart and can finish offline. Dynamic period switching, hierarchical indexes, leading preroll, DRM and other codecs/containers remain outside this profile.
-
-## Crawl a website
-
-Choose **Crawl website**, enter a starting page and set depth, page/result/byte limits and request spacing. The crawler reads linked pages on that site without executing scripts, honors robots rules and nofollow, and returns file candidates for the existing batch review. Choose which files to add before any candidate payload is downloaded. Stop returns the results already found. The original-site browser-session option is explicit and off by default; off-site candidates receive no inherited session consent. The crawler can collect HTML but does not rewrite a complete offline website.
 
 The detailed supported subset and current evidence are in [development verification](docs/development-features.md). Historical [0.10 verification](docs/verification-0.10.md) describes the previous packaged release.
 

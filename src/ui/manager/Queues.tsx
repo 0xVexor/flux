@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Select } from '../components/Select';
 import {
   CalendarClock,
   ChevronDown,
@@ -14,6 +15,8 @@ import type { ManagerAPI } from '../../application/contracts';
 import type { DownloadJob, DownloadQueue } from '../../domain/model';
 import { Modal } from '../components/Modal';
 import { QueueFiles } from './QueueFiles';
+import { DateTimePicker } from '../components/DateTimePicker';
+import { blankDefaultQueue } from '../../domain/queues';
 import { dayNames, hasSchedule, queueStatus, scheduleSummary } from '../components/queue-status';
 
 const allDays = [0, 1, 2, 3, 4, 5, 6];
@@ -42,6 +45,8 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
     at == null
       ? ''
       : new Date(at - new Date(at).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const toValue = (at?: number | null) => localDate(at);
+  const fromValue = (value: string) => (value ? new Date(value).getTime() : null);
   const [draft, setDraft] = useState<DownloadQueue | null>(null);
   const [scheduled, setScheduled] = useState(false);
   const [error, setError] = useState('');
@@ -49,7 +54,7 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
   const [expanded, setExpanded] = useState<string | null>(null);
   const filesToggle = (id: string) => (
     <button
-      className="text-button"
+      className="ds-btn is-ghost is-small"
       aria-expanded={expanded === id}
       onClick={() => setExpanded(expanded === id ? null : id)}
     >
@@ -58,7 +63,33 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
   );
   const snapshot = manager.getSnapshot();
   const queues = snapshot.settings.queues;
+  const startable = (id: string) =>
+    snapshot.jobs.filter(
+      (job) =>
+        (job.queueId ?? 'default') === id &&
+        ['PAUSED', 'WAITING_FOR_NETWORK'].includes(job.state) &&
+        !job.sha256 &&
+        job.engine !== 'browser',
+    );
+  const startAll = (id: string) => (
+    <button
+      className="ds-btn is-outline is-small"
+      disabled={busy || !startable(id).length}
+      title="Start every paused file in this queue"
+      onClick={() =>
+        void run(async () => {
+          const queue = queues.find((item) => item.id === id);
+          if (queue && (queue.paused || !queue.manualRun))
+            await manager.saveQueue({ ...queue, paused: false, manualRun: true });
+          for (const job of startable(id)) await manager.action(job.id, 'resume');
+        })
+      }
+    >
+      <Play size={14} /> Start all ({startable(id).length})
+    </button>
+  );
   const editing = !!draft && queues.some((queue) => queue.id === draft.id);
+  const isMain = draft?.id === 'default';
   async function run(fn: () => Promise<void>) {
     setBusy(true);
     setError('');
@@ -84,62 +115,64 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
         : 'nothing';
   const days = draft?.days ?? allDays;
   return (
-    <Modal title="Download queues" onClose={onClose} wide>
+    <Modal
+      title="Download queues"
+      description="A queue downloads its files a few at a time; start it now or give it a schedule."
+      onClose={onClose}
+      wide
+    >
       <div className="form-stack queues-dialog">
         {!draft && (
           <>
-            <div className="dialog-intro">
-              <span className="intro-icon">
-                <Layers size={22} />
-              </span>
-              <div>
-                <h3>Your downloads, at your pace.</h3>
-                <p className="muted">
-                  A queue downloads its files a few at a time. <strong>Start now</strong> runs it
-                  immediately; a schedule starts it on its own. Open <strong>Files</strong> to
-                  start, hold or time each file.
-                </p>
-              </div>
-            </div>
             <div className="queue-list">
-              <div className="queue-item">
-                <div className="queue-info">
-                  <div className="queue-title">
-                    <strong>Default queue</strong>
-                    <span className="queue-status live">Always on</span>
+              {!snapshot.settings.defaultQueue && (
+                <div className="queue-item">
+                  <div className="queue-info">
+                    <div className="queue-title">
+                      <strong>Default queue</strong>
+                      <span className="queue-status live">Always on</span>
+                    </div>
+                    <small>Downloads start right away · {counts(snapshot.jobs, 'default')}</small>
                   </div>
-                  <small>Downloads start right away · {counts(snapshot.jobs, 'default')}</small>
-                </div>
-                <div className="queue-actions">{filesToggle('default')}</div>
-                {expanded === 'default' && (
-                  <QueueFiles manager={manager} queueId="default" jobs={snapshot.jobs} />
-                )}
-              </div>
-              {!queues.length && (
-                <div className="queue-empty">
-                  <CalendarClock size={26} />
-                  <p>Create a queue to download files later, a few at a time, or on a schedule.</p>
+                  <div className="queue-actions">
+                    {startAll('default')}
+                    <button
+                      className="ds-btn is-ghost is-small"
+                      onClick={() => edit(blankDefaultQueue(snapshot.settings))}
+                    >
+                      <CalendarClock size={14} /> Schedule
+                    </button>
+                    {filesToggle('default')}
+                  </div>
+                  {expanded === 'default' && (
+                    <QueueFiles manager={manager} queueId="default" jobs={snapshot.jobs} />
+                  )}
                 </div>
               )}
-              {queues.map((queue) => {
+
+              {[
+                ...(snapshot.settings.defaultQueue ? [snapshot.settings.defaultQueue] : []),
+                ...queues,
+              ].map((queue) => {
                 const status = queueStatus(queue);
                 const running = status.tone === 'live';
                 return (
                   <div className="queue-item" key={queue.id}>
                     <div className="queue-info">
                       <div className="queue-title">
-                        <strong>{queue.name}</strong>
+                        <strong>{queue.id === 'default' ? 'Default queue' : queue.name}</strong>
                         <span className={`queue-status ${status.tone}`}>{status.label}</span>
                       </div>
                       <small>{scheduleSummary(queue)}</small>
                       <small>
-                        {queue.maxActive} at a time · {counts(snapshot.jobs, queue.id)}
+                        {queue.id === 'default' ? '' : `${queue.maxActive} at a time · `}
+                        {counts(snapshot.jobs, queue.id)}
                       </small>
                     </div>
                     <div className="queue-actions">
                       {running ? (
                         <button
-                          className="button secondary"
+                          className="ds-btn is-outline"
                           disabled={busy}
                           onClick={() =>
                             void run(() =>
@@ -151,7 +184,7 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
                         </button>
                       ) : (
                         <button
-                          className="button primary"
+                          className="ds-btn is-primary"
                           disabled={busy}
                           onClick={() =>
                             void run(() =>
@@ -164,7 +197,7 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
                       )}
                       {queue.paused && hasSchedule(queue) && (
                         <button
-                          className="button secondary"
+                          className="ds-btn is-outline"
                           disabled={busy}
                           title="Wait for the schedule instead of starting now"
                           onClick={() =>
@@ -178,7 +211,7 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
                       )}
                       {status.tone === 'wait' && (
                         <button
-                          className="text-button"
+                          className="ds-btn is-ghost is-small"
                           disabled={busy}
                           onClick={() =>
                             void run(() =>
@@ -190,22 +223,31 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
                         </button>
                       )}
                       <button
-                        className="icon-button"
-                        aria-label={`Edit ${queue.name}`}
+                        className="ds-icon-btn is-small"
+                        aria-label={`Edit ${queue.id === 'default' ? 'Default queue' : queue.name}`}
                         title="Edit"
                         onClick={() => edit(queue)}
                       >
                         <Pencil size={15} />
                       </button>
                       <button
-                        className="icon-button danger-text"
-                        aria-label={`Remove ${queue.name}`}
-                        title="Remove queue (files move to the default queue)"
+                        className="ds-icon-btn is-small is-danger-text"
+                        aria-label={
+                          queue.id === 'default'
+                            ? 'Remove schedule from Default queue'
+                            : `Remove ${queue.name}`
+                        }
+                        title={
+                          queue.id === 'default'
+                            ? 'Remove the schedule (the queue stays)'
+                            : 'Remove queue (files move to the default queue)'
+                        }
                         disabled={busy}
                         onClick={() => void run(() => manager.removeQueue(queue.id))}
                       >
                         <Trash2 size={15} />
                       </button>
+                      {startAll(queue.id)}
                       {filesToggle(queue.id)}
                     </div>
                     {expanded === queue.id && (
@@ -214,6 +256,12 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
                   </div>
                 );
               })}
+              {!queues.length && (
+                <div className="queue-empty">
+                  <CalendarClock size={26} />
+                  <p>Create a queue to download files later, a few at a time, or on a schedule.</p>
+                </div>
+              )}
             </div>
             {error && (
               <p className="error-message" role="alert">
@@ -221,12 +269,12 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
               </p>
             )}
             <footer className="modal-footer">
-              <button type="button" className="button secondary" onClick={onClose}>
+              <button type="button" className="ds-btn is-outline" onClick={onClose}>
                 Close
               </button>
               <button
                 type="button"
-                className="button primary"
+                className="ds-btn is-primary"
                 onClick={() => {
                   setDraft(blankQueue());
                   setScheduled(false);
@@ -258,6 +306,11 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
                 return;
               }
               void run(async () => {
+                if (isMain && !scheduled) {
+                  await manager.removeQueue('default');
+                  setDraft(null);
+                  return;
+                }
                 await manager.saveQueue(
                   editing
                     ? schedule
@@ -268,47 +321,61 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
               });
             }}
           >
-            <h3>{editing ? `Edit “${draft.name}”` : 'New queue'}</h3>
-            <label>
-              Queue name
-              <input
-                required
-                autoFocus
-                maxLength={60}
-                placeholder="e.g. Night downloads"
-                value={draft.name}
-                onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-              />
-            </label>
-            <div className="form-grid">
-              <label>
-                Concurrent downloads
-                <input
-                  type="number"
-                  min={1}
-                  max={8}
-                  value={draft.maxActive}
-                  onChange={(event) =>
-                    setDraft({ ...draft, maxActive: Number(event.target.value) })
-                  }
-                />
-              </label>
-              <label>
-                Queue speed limit (KB/s, 0 = unlimited)
-                <input
-                  type="number"
-                  min={0}
-                  value={draft.speedLimit / 1024}
-                  onChange={(event) =>
-                    setDraft({ ...draft, speedLimit: Number(event.target.value) * 1024 })
-                  }
-                />
-              </label>
-            </div>
+            <h3>
+              {isMain
+                ? 'Schedule the default queue'
+                : editing
+                  ? `Edit “${draft.name}”`
+                  : 'New queue'}
+            </h3>
+            {!isMain && (
+              <>
+                <label>
+                  Queue name
+                  <input
+                    required
+                    autoFocus
+                    maxLength={60}
+                    placeholder="e.g. Night downloads"
+                    value={draft.name}
+                    onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                  />
+                </label>
+                <div className="form-grid">
+                  <label>
+                    Concurrent downloads
+                    <input
+                      type="number"
+                      min={1}
+                      max={8}
+                      value={draft.maxActive}
+                      onChange={(event) =>
+                        setDraft({ ...draft, maxActive: Number(event.target.value) })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Queue speed limit (KB/s, 0 = unlimited)
+                    <input
+                      type="number"
+                      min={0}
+                      value={draft.speedLimit / 1024}
+                      onChange={(event) =>
+                        setDraft({ ...draft, speedLimit: Number(event.target.value) * 1024 })
+                      }
+                    />
+                  </label>
+                </div>
+              </>
+            )}
             <label className="switch-row queue-section">
               <span>
                 <strong>Start on a schedule</strong>
-                <small>Off: the queue downloads as soon as files are added.</small>
+                <small>
+                  {isMain
+                    ? 'Off: files in the default queue download as soon as they are added.'
+                    : 'Off: the queue downloads as soon as files are added.'}
+                </small>
               </span>
               <input
                 type="checkbox"
@@ -318,6 +385,28 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
             </label>
             {scheduled && (
               <div className="queue-schedule">
+                <div className="form-grid">
+                  <label>
+                    Queue first start
+                    <DateTimePicker
+                      aria-label="Queue first start"
+                      value={toValue(draft.startsAt)}
+                      onChange={(value) => setDraft({ ...draft, startsAt: fromValue(value) })}
+                    />
+                  </label>
+                  <label>
+                    Queue final stop
+                    <DateTimePicker
+                      aria-label="Queue final stop"
+                      value={toValue(draft.stopsAt)}
+                      onChange={(value) => setDraft({ ...draft, stopsAt: fromValue(value) })}
+                    />
+                  </label>
+                </div>
+                <p className="small muted">
+                  Leave the first start empty to begin as soon as the daily window opens. In an
+                  overnight window, the selected day is the day the window opens.
+                </p>
                 <div className="form-grid">
                   <label>
                     Queue window start
@@ -364,49 +453,11 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
                     </label>
                   ))}
                 </div>
-                <details className="queue-advanced">
-                  <summary>Date range</summary>
-                  <div className="form-grid">
-                    <label>
-                      Queue first start
-                      <input
-                        type="datetime-local"
-                        value={localDate(draft.startsAt)}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            startsAt: event.target.value
-                              ? new Date(event.target.value).getTime()
-                              : null,
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Queue final stop
-                      <input
-                        type="datetime-local"
-                        value={localDate(draft.stopsAt)}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            stopsAt: event.target.value
-                              ? new Date(event.target.value).getTime()
-                              : null,
-                          })
-                        }
-                      />
-                    </label>
-                  </div>
-                  <p className="small muted">
-                    In an overnight window, the selected day is the day the window opens.
-                  </p>
-                </details>
               </div>
             )}
             <label>
               When all files are finished
-              <select
+              <Select
                 value={afterFinish}
                 onChange={(event) => {
                   const value = event.target.value;
@@ -419,8 +470,10 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
               >
                 <option value="nothing">Keep the queue ready for new files</option>
                 <option value="stop">Stop the queue</option>
-                <option value="repeat">Download the same files again periodically</option>
-              </select>
+                {!isMain && (
+                  <option value="repeat">Download the same files again periodically</option>
+                )}
+              </Select>
             </label>
             {afterFinish === 'repeat' && (
               <label>
@@ -508,10 +561,10 @@ export function Queues({ manager, onClose }: { manager: ManagerAPI; onClose: () 
               </p>
             )}
             <footer className="modal-footer">
-              <button type="button" className="button secondary" onClick={() => setDraft(null)}>
+              <button type="button" className="ds-btn is-outline" onClick={() => setDraft(null)}>
                 Back
               </button>
-              <button className="button primary" disabled={busy}>
+              <button className="ds-btn is-primary" disabled={busy}>
                 Save queue
               </button>
             </footer>

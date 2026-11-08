@@ -1,24 +1,20 @@
-import { useState } from 'react';
 import { FolderDown, TriangleAlert, X } from 'lucide-react';
 import type { ManagerAPI } from '../../application/contracts';
 import type { Snapshot } from '../../domain/model';
+import { useDismissed } from './dismissed';
 
 /** Main-page status for automatic saving, next to the capture status. */
 export function SaveSetup({
   snapshot,
   manager,
   run,
-  onSettings,
 }: {
   snapshot: Snapshot;
   manager: ManagerAPI;
   run: (fn: () => Promise<unknown>) => void;
-  onSettings: () => void;
 }) {
   const settings = snapshot.settings;
-  const [hidden, setHidden] = useState(false);
-  const base = snapshot.destination?.name ?? '';
-  const target = settings.saveByCategory ? `${base}/<category>` : base;
+  const [hidden, dismiss] = useDismissed('saving');
   // Flux writes files itself; without a chosen folder, finished downloads wait for one.
   const blocked = settings.autoSave && !snapshot.destination;
   const needsAccess =
@@ -36,7 +32,7 @@ export function SaveSetup({
         </div>
         <div className="ds-alert-actions">
           <button
-            className="ds-btn is-primary is-small"
+            className="ds-btn is-outline is-small"
             onClick={() => run(() => manager.restoreFolderAccess())}
           >
             Allow folder access
@@ -50,6 +46,7 @@ export function SaveSetup({
         </div>
       </section>
     );
+  if (hidden && !needsAccess) return null;
   if (!settings.autoSave)
     return (
       <section className="ds-alert is-spaced" aria-label="Automatic saving">
@@ -60,10 +57,17 @@ export function SaveSetup({
         </div>
         <div className="ds-alert-actions">
           <button
-            className="ds-btn is-primary is-small"
+            className="ds-btn is-outline is-small"
             onClick={() => run(() => manager.setAutoSave(true))}
           >
             Turn on automatic saving
+          </button>
+          <button
+            className="ds-icon-btn is-small"
+            aria-label="Dismiss banner"
+            onClick={dismiss}
+          >
+            <X size={16} />
           </button>
         </div>
       </section>
@@ -83,36 +87,20 @@ export function SaveSetup({
         </div>
         <div className="ds-alert-actions">
           <button
-            className="ds-btn is-primary is-small"
+            className="ds-btn is-outline is-small"
             onClick={() => run(() => manager.chooseDownloadFolder())}
           >
             Choose a folder
           </button>
+          <button
+            className="ds-icon-btn is-small"
+            aria-label="Dismiss banner"
+            onClick={dismiss}
+          >
+            <X size={16} />
+          </button>
         </div>
       </section>
     );
-  if (hidden) return null;
-  return (
-    <section className="ds-alert is-spaced" aria-label="Automatic saving">
-      <FolderDown size={16} aria-hidden="true" />
-      <div className="ds-alert-body">
-        <strong>Automatic saving is on</strong>
-        <p>
-          Finished downloads go to <code>{target}</code> automatically.
-        </p>
-      </div>
-      <div className="ds-alert-actions">
-        <button className="ds-btn is-outline is-small" onClick={onSettings}>
-          <FolderDown size={16} aria-hidden="true" /> Change folders
-        </button>
-        <button
-          className="ds-icon-btn is-small"
-          aria-label="Dismiss banner"
-          onClick={() => setHidden(true)}
-        >
-          <X size={16} />
-        </button>
-      </div>
-    </section>
-  );
+  return null;
 }

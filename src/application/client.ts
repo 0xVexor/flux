@@ -31,6 +31,7 @@ import {
   queueAvailable,
   nextQueueBoundary,
 } from './queue';
+import { allQueues, mapQueues, queueOf } from '../domain/queues';
 import { enableCompletionSound, playCompletionSound } from './feedback';
 import { withSHA256 } from '../engine/hash';
 import { captureOrigins, excludedHost } from '../shared/capture';
@@ -45,12 +46,6 @@ import { nextRetryAt, retryDue, hasPendingTransfer } from '../domain/retry';
 import type { DownloadNotice } from '../shared/notices';
 import type { HlsReview, MediaReview } from '../engine/media/types';
 import type { DashReview, DashSelection } from '../engine/media/dash';
-import {
-  validateCrawlOptions,
-  type CrawlOptions,
-  type CrawlProgress,
-  type CrawlResult,
-} from '../engine/crawl/site';
 import { HostPermissionError } from '../engine/network/policy';
 
 const isExtension = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
@@ -97,13 +92,6 @@ class Manager implements ManagerAPI {
     (reply: Extract<WorkerEvent, { type: 'hls-review' }>) => void
   >();
   private reviewedOrigins = new Map<string, { at: number; origins: string[] }>();
-  private crawls = new Map<
-    string,
-    {
-      progress?: (value: CrawlProgress) => void;
-      done: (reply: Extract<WorkerEvent, { type: 'crawl-result' }>) => void;
-    }
-  >();
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -482,12 +470,6 @@ class Manager implements ManagerAPI {
     this.publish({ storage: { usage: estimate.usage ?? 0, quota: estimate.quota ?? 0 } });
   }
   private async workerCrashed() {
-    for (const [requestId, request] of this.crawls)
-      request.done({
-        type: 'crawl-result',
-        requestId,
-        error: 'The worker stopped. Scan the site again after reloading the manager.',
-      });
     this.holdQueue = true;
     for (const [requestId, reply] of [...this.inspections])
       reply({
@@ -518,14 +500,6 @@ class Manager implements ManagerAPI {
       .catch(() => undefined);
   }
   private async onWorker(event: WorkerEvent) {
-    if (event.type === 'crawl-progress') {
-      this.crawls.get(event.requestId)?.progress?.(event.progress);
-      return;
-    }
-    if (event.type === 'crawl-result') {
-      this.crawls.get(event.requestId)?.done(event);
-      return;
-    }
     if (event.type === 'hls-review') {
       this.inspections.get(event.requestId)?.(event);
       return;
@@ -568,7 +542,7 @@ class Manager implements ManagerAPI {
       const settings = this.snapshot.settings;
       if (event.type === 'done') {
         // With automatic saving on, the file announces itself once it is saved instead.
-        const queue = settings.queues.find((item) => item.id === event.job.queueId);
+        const queue = queueOf(settings, event.job.queueId);
         if (!queue?.notifyOnComplete && (!settings.autoSave || !this.directory))
           this.announce({ kind: 'ready', filename: event.job.filename });
       }
@@ -809,12 +783,20 @@ class Manager implements ManagerAPI {
   }
   async saveQueue(queue: DownloadQueue) {
     this.ensureOwner();
-    if (
-      queue.id === 'default' ||
-      !/^[a-zA-Z0-9-]{1,80}$/.test(queue.id) ||
-      !queue.name.trim() ||
-      queue.name.length > 60
-    )
+    if (queue.id === 'default') {
+      // The main queue keeps the global concurrency and speed settings; only its schedule is its own.
+      const main: DownloadQueue = {
+        ...queue,
+        name: 'Default queue',
+        maxActive: this.snapshot.settings.maxActive,
+        speedLimit: 0,
+        nextRunAt: null,
+        repeatMinutes: undefined,
+      };
+      await this.updateSettings({ ...this.snapshot.settings, defaultQueue: main });
+      return;
+    }
+    if (!/^[a-zA-Z0-9-]{1,80}$/.test(queue.id) || !queue.name.trim() || queue.name.length > 60)
       throw new Error('Use a valid queue name and identifier.');
     const queues = this.snapshot.settings.queues.filter((item) => item.id !== queue.id);
     const existing = this.snapshot.settings.queues.find((item) => item.id === queue.id);
@@ -831,6 +813,11 @@ class Manager implements ManagerAPI {
   }
   async removeQueue(id: string) {
     this.ensureOwner();
+    if (id === 'default') {
+      const { defaultQueue: _schedule, ...rest } = this.snapshot.settings;
+      await this.updateSettings(rest);
+      return;
+    }
     const assigned = this.snapshot.jobs.filter((job) => job.queueId === id);
     const priorHold = this.holdQueue;
     this.holdQueue = true;
@@ -846,6 +833,8 @@ class Manager implements ManagerAPI {
       await this.updateSettings({
         ...this.snapshot.settings,
         queues: this.snapshot.settings.queues.filter((queue) => queue.id !== id),
+        newQueueId:
+          this.snapshot.settings.newQueueId === id ? undefined : this.snapshot.settings.newQueueId,
       });
     } finally {
       this.holdQueue = priorHold;
@@ -1104,10 +1093,10 @@ class Manager implements ManagerAPI {
       !Array.isArray(settings.queues) ||
       settings.queues.length > 30 ||
       new Set(settings.queues.map((queue) => queue.id)).size !== settings.queues.length ||
-      settings.queues.some(
+      [...settings.queues, ...(settings.defaultQueue ? [settings.defaultQueue] : [])].some(
         (queue) =>
           !queue.id ||
-          queue.id === 'default' ||
+          (queue.id === 'default') !== (queue === settings.defaultQueue) ||
           !/^[a-zA-Z0-9-]{1,80}$/.test(queue.id) ||
           !queue.name?.trim() ||
           queue.name.length > 60 ||
@@ -1143,6 +1132,13 @@ class Manager implements ManagerAPI {
       )
     )
       throw new Error('Invalid download queue settings.');
+    if (
+      settings.newQueueId !== undefined &&
+      (typeof settings.newQueueId !== 'string' ||
+        (settings.newQueueId !== 'default' &&
+          !settings.queues.some((queue) => queue.id === settings.newQueueId)))
+    )
+      throw new Error('Choose an existing queue for new downloads.');
     if (
       [settings.windowStart, settings.windowEnd].some(
         (s) => s && !/^([01]\d|2[0-3]):[0-5]\d$/.test(s),
@@ -1625,59 +1621,6 @@ class Manager implements ManagerAPI {
     await enableCompletionSound();
     playCompletionSound();
   }
-  async detectMedia() {
-    if (!isExtension) return [];
-    const result = await chrome.runtime.sendMessage({ type: 'detect-media' });
-    if (result?.error) throw new Error(result.error);
-    return result?.items ?? [];
-  }
-  async discoverLinks() {
-    if (!isExtension) return [];
-    const result = await chrome.runtime.sendMessage({ type: 'discover-links' });
-    if (result?.error) throw new Error(result.error);
-    return result?.items ?? [];
-  }
-  async crawlSite(
-    raw: string,
-    options: CrawlOptions,
-    signal?: AbortSignal,
-    progress?: (value: CrawlProgress) => void,
-  ): Promise<CrawlResult> {
-    this.ensureOwner();
-    validateCrawlOptions(options);
-    if (!isExtension) throw new Error('Site crawling requires the installed extension.');
-    if (this.crawls.size) throw new Error('Finish or stop the current site scan first.');
-    const url = validateUrl(raw);
-    if (!(await chrome.permissions.request({ origins: [originPattern(url.href)] })))
-      throw new Error('Website access was declined.');
-    if (signal?.aborted) throw new DOMException('Scan canceled.', 'AbortError');
-    this.ensureOwner();
-    if (this.crawls.size) throw new Error('Finish or stop the current site scan first.');
-    const requestId = crypto.randomUUID();
-    return new Promise<CrawlResult>((resolve, reject) => {
-      const stop = () => this.worker?.postMessage({ type: 'cancel-crawl', requestId });
-      const cleanup = () => {
-        clearTimeout(timer);
-        signal?.removeEventListener('abort', stop);
-        this.crawls.delete(requestId);
-      };
-      const timer = setTimeout(() => {
-        stop();
-        cleanup();
-        reject(new Error('The site scan did not finish within its time limit.'));
-      }, 330000);
-      this.crawls.set(requestId, {
-        progress,
-        done: (reply) => {
-          cleanup();
-          if (reply.result) resolve(reply.result);
-          else reject(new Error(reply.error ?? 'The site scan failed.'));
-        },
-      });
-      signal?.addEventListener('abort', stop, { once: true });
-      this.worker!.postMessage({ type: 'crawl-site', requestId, url: url.href, options });
-    });
-  }
   private async pump() {
     if (this.pumping) {
       this.pumpAgain = true;
@@ -1736,7 +1679,7 @@ class Manager implements ManagerAPI {
           (this.snapshot.jobs.some(
             (j) => j.state === 'QUEUED' || !!j.budgetResumeAt || j.queueRetryAt != null,
           ) ||
-            this.snapshot.settings.queues.some(
+            allQueues(this.snapshot.settings).some(
               (queue) => !queue.paused && queue.repeatMinutes && queue.nextRunAt,
             ))
         ) {
@@ -1751,7 +1694,7 @@ class Manager implements ManagerAPI {
       for (const id of [...this.active]) {
         if (this.forced.has(id)) continue;
         const job = this.job(id);
-        const queue = this.snapshot.settings.queues.find((item) => item.id === job.queueId);
+        const queue = queueOf(this.snapshot.settings, job.queueId);
         if (queue && !queueAvailable(queue)) {
           await this.stop(job);
           const stopped = this.job(id);
@@ -1779,13 +1722,13 @@ class Manager implements ManagerAPI {
         if (this.active.size >= this.snapshot.settings.maxActive) break;
         const forced = this.forced.has(job.id);
         if (!windowOpen && !forced) continue;
-        const queue = this.snapshot.settings.queues.find((item) => item.id === job.queueId);
+        const queue = queueOf(this.snapshot.settings, job.queueId);
         if (
           queue &&
           !forced &&
           (!queueAvailable(queue) ||
-            [...this.active].filter((id) => this.job(id).queueId === queue.id).length >=
-              queue.maxActive)
+            [...this.active].filter((id) => (this.job(id).queueId ?? 'default') === queue.id)
+              .length >= queue.maxActive)
         )
           continue;
         if (
@@ -1877,7 +1820,7 @@ class Manager implements ManagerAPI {
           this.snapshot.jobs.some((j) => j.state === 'QUEUED' || j.queueRetryAt != null))
       )
         future.push(boundary);
-      for (const queue of this.snapshot.settings.queues) {
+      for (const queue of allQueues(this.snapshot.settings)) {
         if (!queue.paused && queue.nextRunAt && queue.nextRunAt > Date.now())
           future.push(queue.nextRunAt);
         if (
@@ -1885,7 +1828,7 @@ class Manager implements ManagerAPI {
           (!queue.repeatMinutes &&
             !this.snapshot.jobs.some(
               (job) =>
-                job.queueId === queue.id &&
+                (job.queueId ?? 'default') === queue.id &&
                 (job.state === 'QUEUED' || job.queueRetryAt != null || this.active.has(job.id)),
             ))
         )
@@ -1914,7 +1857,7 @@ class Manager implements ManagerAPI {
   /** A queue with only a start time keeps running past midnight until its files finish. */
   private async latchQueueRuns() {
     const due = new Set(
-      this.snapshot.settings.queues
+      allQueues(this.snapshot.settings)
         .filter(
           (queue) =>
             !queue.paused &&
@@ -1922,24 +1865,23 @@ class Manager implements ManagerAPI {
             queue.windowStart &&
             !queue.windowEnd &&
             queueAvailable(queue) &&
-            this.snapshot.jobs.some((job) => job.queueId === queue.id && job.state === 'QUEUED'),
+            this.snapshot.jobs.some(
+              (job) => (job.queueId ?? 'default') === queue.id && job.state === 'QUEUED',
+            ),
         )
         .map((queue) => queue.id),
     );
     if (!due.size) return;
-    const settings = {
-      ...this.snapshot.settings,
-      queues: this.snapshot.settings.queues.map((queue) =>
-        due.has(queue.id) ? { ...queue, manualRun: true } : queue,
-      ),
-    };
+    const settings = mapQueues(this.snapshot.settings, (queue) =>
+      due.has(queue.id) ? { ...queue, manualRun: true } : queue,
+    );
     await this.repository.putSettings(settings);
     this.publish({ settings });
   }
   private async completeQueues() {
-    for (const queue of this.snapshot.settings.queues) {
+    for (const queue of allQueues(this.snapshot.settings)) {
       const id = queue.id;
-      const jobs = this.snapshot.jobs.filter((job) => job.queueId === id);
+      const jobs = this.snapshot.jobs.filter((job) => (job.queueId ?? 'default') === id);
       if (
         !jobs.length ||
         jobs.some((job) => !['ASSEMBLING', 'COMPLETED', 'CANCELED'].includes(job.state)) ||
@@ -1948,12 +1890,9 @@ class Manager implements ManagerAPI {
         continue;
       const notify = this.armedQueues.delete(id);
       if (queue.manualRun) {
-        const settings = {
-          ...this.snapshot.settings,
-          queues: this.snapshot.settings.queues.map((item) =>
-            item.id === id ? { ...item, manualRun: false } : item,
-          ),
-        };
+        const settings = mapQueues(this.snapshot.settings, (item) =>
+          item.id === id ? { ...item, manualRun: false } : item,
+        );
         await this.repository.putSettings(settings);
         this.publish({ settings });
       }
@@ -1964,31 +1903,23 @@ class Manager implements ManagerAPI {
           waiting: jobs.filter((job) => job.state === 'ASSEMBLING').length,
         });
       if (queue.stopOnComplete && !queue.paused) {
-        const settings = {
-          ...this.snapshot.settings,
-          queues: this.snapshot.settings.queues.map((item) =>
-            item.id === id ? { ...item, paused: true } : item,
-          ),
-        };
+        const settings = mapQueues(this.snapshot.settings, (item) =>
+          item.id === id ? { ...item, paused: true } : item,
+        );
         await this.repository.putSettings(settings);
         this.publish({ settings });
       }
       if (queue.repeatMinutes && !queue.paused && !queue.nextRunAt) {
-        const settings = {
-          ...this.snapshot.settings,
-          queues: this.snapshot.settings.queues.map((item) =>
-            item.id === id
-              ? { ...item, nextRunAt: Date.now() + queue.repeatMinutes! * 60000 }
-              : item,
-          ),
-        };
+        const settings = mapQueues(this.snapshot.settings, (item) =>
+          item.id === id ? { ...item, nextRunAt: Date.now() + queue.repeatMinutes! * 60000 } : item,
+        );
         await this.repository.putSettings(settings);
         this.publish({ settings });
       }
     }
   }
   private async repeatQueues() {
-    for (const queue of this.snapshot.settings.queues) {
+    for (const queue of allQueues(this.snapshot.settings)) {
       if (
         !queue.repeatMinutes ||
         !queue.nextRunAt ||
@@ -1996,7 +1927,7 @@ class Manager implements ManagerAPI {
         !queueAvailable(queue)
       )
         continue;
-      const jobs = this.snapshot.jobs.filter((job) => job.queueId === queue.id);
+      const jobs = this.snapshot.jobs.filter((job) => (job.queueId ?? 'default') === queue.id);
       if (jobs.some((job) => !['ASSEMBLING', 'COMPLETED', 'CANCELED'].includes(job.state)))
         continue;
       const templates = [
@@ -2034,12 +1965,9 @@ class Manager implements ManagerAPI {
         maxConnections: template.maxConnections,
         mode: template.mode,
       }));
-      const settings = {
-        ...this.snapshot.settings,
-        queues: this.snapshot.settings.queues.map((item) =>
-          item.id === queue.id ? { ...item, nextRunAt: null } : item,
-        ),
-      };
+      const settings = mapQueues(this.snapshot.settings, (item) =>
+        item.id === queue.id ? { ...item, nextRunAt: null } : item,
+      );
       await this.repository.putQueueRun(next, settings);
       this.publish({ jobs: [...next, ...this.snapshot.jobs], settings });
     }

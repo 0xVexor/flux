@@ -651,6 +651,80 @@ describe('batch import, named queues and address refresh', () => {
       expect(worker.commands.filter((command) => command.type === 'start')).toHaveLength(3),
     );
   });
+  it('holds the default queue until its scheduled start, then runs it', async () => {
+    const manager = await initialize();
+    await manager.saveQueue({
+      id: 'default',
+      name: 'ignored',
+      paused: false,
+      maxActive: 99,
+      speedLimit: 5000,
+      windowStart: '',
+      windowEnd: '',
+      startsAt: Date.now() + 3600000,
+    });
+    const main = manager.getSnapshot().settings.defaultQueue!;
+    // The main queue keeps the global limits; only its schedule is its own.
+    expect(main.id).toBe('default');
+    expect(main.name).toBe('Default queue');
+    expect(main.maxActive).toBe(manager.getSnapshot().settings.maxActive);
+    expect(main.speedLimit).toBe(0);
+    await manager.add({ url: 'https://example.org/main-held' });
+    const worker = ControlledWorker.instances[0]!;
+    expect(manager.getSnapshot().jobs[0]!.state).toBe('QUEUED');
+    expect(worker.commands.filter((command) => command.type === 'start')).toHaveLength(0);
+    await manager.saveQueue({ ...main, startsAt: null });
+    await vi.waitFor(() =>
+      expect(worker.commands.filter((command) => command.type === 'start')).toHaveLength(1),
+    );
+  });
+  it('lets a stopped default queue be started now and removes its schedule again', async () => {
+    const manager = await initialize();
+    await manager.saveQueue({
+      id: 'default',
+      name: 'Default queue',
+      paused: false,
+      maxActive: 1,
+      speedLimit: 0,
+      windowStart: '',
+      windowEnd: '',
+      startsAt: Date.now() + 3600000,
+    });
+    await manager.add({ url: 'https://example.org/main-now' });
+    const worker = ControlledWorker.instances[0]!;
+    expect(worker.commands.filter((command) => command.type === 'start')).toHaveLength(0);
+    await manager.saveQueue({ ...manager.getSnapshot().settings.defaultQueue!, manualRun: true });
+    await vi.waitFor(() =>
+      expect(worker.commands.filter((command) => command.type === 'start')).toHaveLength(1),
+    );
+    await manager.removeQueue('default');
+    expect(manager.getSnapshot().settings.defaultQueue).toBeUndefined();
+    expect((await new Repository().getSettings()).defaultQueue).toBeUndefined();
+  });
+  it('sends new downloads to the chosen queue and forgets it when that queue is removed', async () => {
+    const manager = await initialize();
+    await manager.saveQueue({
+      id: 'night',
+      name: 'Night',
+      paused: true,
+      maxActive: 1,
+      speedLimit: 0,
+      windowStart: '',
+      windowEnd: '',
+    });
+    await manager.updateSettings({ ...manager.getSnapshot().settings, newQueueId: 'night' });
+    await manager.add({ url: 'https://example.org/lands-in-night' });
+    expect(manager.getSnapshot().jobs[0]!.queueId).toBe('night');
+    await manager.add({ url: 'https://example.org/explicit', queueId: 'default' });
+    expect(manager.getSnapshot().jobs.find((job) => job.url.endsWith('explicit'))!.queueId).toBe(
+      'default',
+    );
+    await expect(
+      manager.updateSettings({ ...manager.getSnapshot().settings, newQueueId: 'missing' }),
+    ).rejects.toThrow('existing queue');
+    await manager.removeQueue('night');
+    expect(manager.getSnapshot().settings.newQueueId).toBeUndefined();
+  });
   it('refreshes a stopped source without discarding checkpoints or trusting the new URL identity', async () => {
     const job = verifiedJob();
     job.state = 'PAUSED';

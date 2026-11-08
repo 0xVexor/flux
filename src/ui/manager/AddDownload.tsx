@@ -32,6 +32,7 @@ import { validateUrl } from '../../shared/security';
 import { sanitizeFilename } from '../../shared/files';
 import { FolderChoice, folderValue } from '../components/FolderChoice';
 import { Select } from '../components/Select';
+import { newQueueId } from '../../domain/queues';
 import { MoreOptions } from '../components/MoreOptions';
 import { DateTimePicker } from '../components/DateTimePicker';
 import type { HlsReview } from '../../engine/media/types';
@@ -986,7 +987,11 @@ export function AddDownload({
           >
             <div className="row">
               <label htmlFor="add-queue">Download queue</label>
-              <Select id="add-queue" name="queueId" defaultValue="default">
+              <Select
+                id="add-queue"
+                name="queueId"
+                defaultValue={newQueueId(snapshot.settings)}
+              >
                 <option value="default">Default queue</option>
                 {snapshot.settings.queues.map((queue) => (
                   <option key={queue.id} value={queue.id}>

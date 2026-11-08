@@ -24,4 +24,4 @@ You can revoke website access and notifications in Chrome or Flux settings, disa
 
 Before any public store distribution, the distributor must provide publisher identity and contact information alongside this policy and reconcile it with the exact shipped version. This repository does not publish the policy or transmit any information on your behalf.
 
-User-invoked site crawling reads bounded same-origin linked pages and robots rules as inert HTML, applies configured limits, and returns candidates for batch review. It does not execute page scripts or send scan results to a service. Dynamic DASH/HLS recordings keep a bounded local manifest snapshot and selected track identities so retained content can be finished after interruption.
+Dynamic DASH/HLS recordings keep a bounded local manifest snapshot and selected track identities so retained content can be finished after interruption.

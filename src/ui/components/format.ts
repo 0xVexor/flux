@@ -35,3 +35,14 @@ export const isActive = (job: DownloadJob) =>
   ['PROBING', 'DOWNLOADING', 'PAUSING', 'RETRYING', 'WAITING_FOR_NETWORK', 'EXPORTING'].includes(
     job.state,
   );
+
+/** "Today, 17:40", "Yesterday, 09:12" or "8 Nov 2026" for when a download was added. */
+export function addedAt(time: number, now = Date.now()): string {
+  const date = new Date(time);
+  const clock = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const day = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const gap = Math.round((day(new Date(now)) - day(date)) / 86_400_000);
+  if (gap === 0) return `Today, ${clock}`;
+  if (gap === 1) return `Yesterday, ${clock}`;
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}

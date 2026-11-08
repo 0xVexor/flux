@@ -6,6 +6,7 @@ import { categoryIcons } from '../components/category-icons';
 import { FolderChoice, folderValue } from '../components/FolderChoice';
 import { queueStatus } from '../components/queue-status';
 import { Select } from '../components/Select';
+import { newQueueId } from '../../domain/queues';
 import { DateTimePicker } from '../components/DateTimePicker';
 import { MoreOptions } from '../components/MoreOptions';
 import '../ds.css';
@@ -46,7 +47,7 @@ export function QueueChooser({
   const items = choice.items;
   // Files that arrive while this is open are selected by default.
   const [skipped, setSkipped] = useState<Set<string>>(() => new Set());
-  const [queueId, setQueueId] = useState('default');
+  const [queueId, setQueueId] = useState(() => newQueueId(snapshot.settings));
   const [folderChoice, setFolderChoice] = useState('');
   const [newFolder, setNewFolder] = useState('');
   const settings = snapshot.settings;

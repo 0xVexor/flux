@@ -21,11 +21,11 @@ export function StartChoice({
     <div className="start-choice">
       <label>
         When to start
-        <select value={mode} onChange={(event) => onChange(event.target.value as StartMode)}>
+        <Select value={mode} onChange={(event) => onChange(event.target.value as StartMode)}>
           <option value="now">As soon as possible</option>
           <option value="later">At a specific time</option>
           {allowPaused && <option value="paused">Don’t start yet (I’ll start it)</option>}
-        </select>
+        </Select>
       </label>
       {mode === 'later' && (
         <label>
@@ -41,3 +41,4 @@ export function StartChoice({
     </div>
   );
 }
+import { Select } from '../components/Select';

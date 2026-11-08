@@ -35,7 +35,10 @@ yarn-debug.log*
 yarn-error.log*
 
 # Editors and tooling
-.claude/
+.claude/*
+!.claude/rules/
+.claude/rules/*
+!.claude/rules/design-system.md
 .vscode/
 !.vscode/extensions.json
 .idea/

@@ -1,4 +1,5 @@
 import type { DownloadJob, DownloadQueue, Settings } from './model';
+import { queueOf } from './queues';
 
 export function retryPolicy(settings: Settings, queue?: DownloadQueue) {
   return {
@@ -18,10 +19,7 @@ export function nextRetryAt(job: DownloadJob, settings: Settings): number | null
     job.capturePending
   )
     return null;
-  const { attempts, seconds } = retryPolicy(
-    settings,
-    settings.queues.find((queue) => queue.id === job.queueId),
-  );
+  const { attempts, seconds } = retryPolicy(settings, queueOf(settings, job.queueId));
   const used = job.queueRetries ?? 0;
   if (
     !Number.isInteger(attempts) ||

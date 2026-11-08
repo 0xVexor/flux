@@ -106,6 +106,7 @@
   cursor: not-allowed;
 }
 .add-form .add-url .input-icon input {
+  padding-left: calc(var(--ds-space-3) + var(--ds-space-4) + var(--ds-space-2));
   padding-right: 44px;
 }
 .add-form .url-clear {
@@ -174,9 +175,9 @@
   border: 0;
   transform: none;
   background: var(--accent-ink);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+  -webkit-mask: url('../assets/check.svg?no-inline')
     center / 14px no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+  mask: url('../assets/check.svg?no-inline')
     center / 14px no-repeat;
 }
 .add-form .check-line {
@@ -196,41 +197,6 @@
 }
 .add-form .speed-row .ds-select.is-small .ds-select-trigger {
   height: var(--ds-h);
-}
-
-/* ---- Switch: 32 by 18, a 16 px thumb that moves 14 px. ---- */
-.add-form .switch-static input[type='checkbox'] {
-  position: relative;
-  width: 32px;
-  height: 18px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: var(--border-strong);
-  box-shadow: var(--ds-shadow-xs);
-}
-.add-form .switch-static input[type='checkbox']::after {
-  display: none;
-}
-.add-form .switch-static input[type='checkbox']::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--text);
-  transition: left 0.15s;
-}
-:root[data-theme='light'] .add-form .switch-static input[type='checkbox']::before {
-  background: var(--surface);
-}
-.add-form .switch-static input[type='checkbox']:checked {
-  background: var(--accent);
-}
-.add-form .switch-static input[type='checkbox']:checked::before {
-  left: 14px;
-  background: var(--accent-ink);
 }
 
 /* ---- Tabs: a segmented control. ---- */
@@ -429,4 +395,9 @@ html.capture-mode body {
   margin: auto calc(var(--ds-space-6) * -1) 0;
   padding: var(--ds-space-4) var(--ds-space-6);
   background: var(--surface);
+}
+
+/* The link icon sits inside the field, so the text starts after it (12 + 16 + 8). */
+.modal .add-form .add-url .input-icon input[name='url'] {
+  padding-left: calc(var(--ds-space-3) + var(--ds-space-4) + var(--ds-space-2));
 }
